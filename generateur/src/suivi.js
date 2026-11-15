@@ -87,16 +87,17 @@
   var statut = el('span', { class: 'suivi-msg', role: 'status', 'aria-live': 'polite' });
   var retry = el('button', { type: 'button', class: 'suivi-btn suivi-retry', text: 'Réessayer' });
   retry.hidden = true;
+  var statuts = [statut], retries = [retry];   // la fiche a une 2e zone en bas de page
   var timerMsg = null;
   function message(txt, duree) {
     if (timerMsg) { clearTimeout(timerMsg); timerMsg = null; }
-    statut.textContent = txt;
-    statut.classList.toggle('suivi-erreur', /^(Suivi indisponible|Impossible)/.test(txt));
-    if (duree) { timerMsg = setTimeout(function () { statut.textContent = ''; statut.classList.remove('suivi-erreur'); }, duree); }
+    var erreur = /^(Suivi indisponible|Impossible)/.test(txt);
+    statuts.forEach(function (st) { st.textContent = txt; st.classList.toggle('suivi-erreur', erreur); });
+    if (duree) { timerMsg = setTimeout(function () { statuts.forEach(function (st) { st.textContent = ''; st.classList.remove('suivi-erreur'); }); }, duree); }
   }
 
   /* ---------- case à cocher de la fiche ---------- */
-  var boite = null, coche = null;
+  var boite = null, coche = null, coches = [];
   if (codePage) {
     var h1 = main.querySelector('.page-head h1');
     coche = el('input', { type: 'checkbox', id: 'suivi-revisee', class: 'suivi-case' });
@@ -106,7 +107,22 @@
       statut, retry,
     ]);
     if (h1) { h1.parentNode.insertBefore(boite, h1.nextSibling); } else { main.insertBefore(boite, main.firstChild); }
+    coches.push(coche);
     coche.addEventListener('change', onCoche);
+    /* Même case en bas de la fiche, avant « Fiche suivante » : on peut aussi passer à la suivante sans cocher. */
+    var statutBas = el('span', { class: 'suivi-msg', role: 'status', 'aria-live': 'polite' });
+    var retryBas = el('button', { type: 'button', class: 'suivi-btn suivi-retry', text: 'Réessayer' });
+    retryBas.hidden = true;
+    var cocheBas = el('input', { type: 'checkbox', id: 'suivi-revisee-bas', class: 'suivi-case' });
+    cocheBas.disabled = true;
+    var boiteBas = el('div', { class: 'suivi-fiche suivi-fiche-bas' }, [
+      el('span', { class: 'suivi-ligne' }, [cocheBas, el('label', { for: 'suivi-revisee-bas', text: 'Marquer cette fiche comme révisée' })]),
+      statutBas, retryBas,
+    ]);
+    var pager = main.querySelector('.pager');
+    if (pager) { pager.parentNode.insertBefore(boiteBas, pager); } else { main.appendChild(boiteBas); }
+    coches.push(cocheBas); statuts.push(statutBas); retries.push(retryBas);
+    cocheBas.addEventListener('change', onCoche);
   } else if (!estAccueil && !zoneExport && !estEmploi) {
     /* Pages d'index : un message discret en tête de page, vide tant que tout va bien (sur l'accueil, il est dans le bloc de suivi). */
     main.insertBefore(el('p', { class: 'suivi-avis' }, [statut, retry]), main.firstChild);
@@ -209,27 +225,25 @@
   /* ---------- rendu global ---------- */
   function rendre() {
     var pret = !chargement && !indispo;
-    if (coche) {
-      coche.checked = pret && etat[codePage] === true;
-      coche.disabled = !pret || occupe;
-    }
-    retry.hidden = !indispo;
+    coches.forEach(function (c) { c.checked = pret && etat[codePage] === true; c.disabled = !pret || occupe; });
+    retries.forEach(function (r) { r.hidden = !indispo; });
     majMenu();
     majAccueil();
   }
 
   /* ---------- actions ---------- */
-  function onCoche() {
+  function onCoche(ev) {
     if (occupe || chargement || indispo) { rendre(); return; }
-    var avant = copy(etat), val = coche.checked;
+    var source = ev.target;
+    var avant = copy(etat), val = source.checked;
     if (val) { etat[codePage] = true; } else { delete etat[codePage]; }
     occupe = true; message('Enregistrement…'); rendre();
     ecrireFiche(codePage, val).then(function (serveur) {
       etat = serveur; occupe = false; message('Enregistré', 4000); rendre();
-      if (coche) { coche.focus(); }
+      source.focus();
     }, function () {
       etat = avant; occupe = false; message(MSG_ECHEC); rendre();
-      if (coche) { coche.focus(); }
+      source.focus();
     });
   }
 
@@ -313,7 +327,7 @@
 
   /* ---------- chargement initial et rafraîchissement ---------- */
   function charger() {
-    chargement = true; indispo = false; retry.hidden = true;
+    chargement = true; indispo = false; retries.forEach(function (r) { r.hidden = true; });
     message(codePage ? 'Chargement du suivi…' : ''); rendre();
     lire().then(function (serveur) {
       etat = serveur; chargement = false; indispo = false; derniereLecture = Date.now();
@@ -323,7 +337,7 @@
       message(MSG_INDISPO); rendre();
     });
   }
-  retry.addEventListener('click', charger);
+  retries.forEach(function (r) { r.addEventListener('click', charger); });
 
   /* Autre appareil : on relit l'état en revenant sur l'onglet (au plus une fois toutes les 30 s, jamais pendant une écriture). */
   function rafraichir() {

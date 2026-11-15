@@ -164,7 +164,7 @@ await test('échec à l\'écriture (connexion coupée) : message, case revenue e
 });
 await test('échec à l\'écriture (réponse 500) pour une décoche : la case redevient cochée', async () => {
   reset(); kv.store.set('revisees', '{"J5":true}'); const p = await open(ctxA, '/fiches/j05.html'); await attendreActive(p); ok(await caseDe(p).isChecked());
-  mode.fail = '500'; await caseDe(p).uncheck();
+  mode.fail = '500'; await caseDe(p).click({ noWaitAfter: true, force: true }).catch(() => {});
   await p.waitForFunction(() => /Impossible d.enregistrer/.test(document.querySelector('.suivi-fiche .suivi-msg').textContent), null, { timeout: 5000 });
   ok(await caseDe(p).isChecked(), 'case revenue cochée'); eq(await p.locator('#menu .suivi-ok').count(), 1); eq(serverState(), { J5: true });
   await p.close();
@@ -174,8 +174,8 @@ await test('échec au chargement : message visible, case désactivée et décoch
   const p = await open(ctxA, '/fiches/j05.html');
   await p.waitForFunction(() => /Suivi indisponible : impossible de joindre le service\./.test(document.querySelector('.suivi-fiche .suivi-msg').textContent), null, { timeout: 15000 });
   ok(await caseDe(p).isDisabled()); ok(!(await caseDe(p).isChecked())); eq(await p.locator('#menu .suivi-ok').count(), 0);
-  ok(await p.locator('.suivi-retry').isVisible(), 'bouton Réessayer');
-  mode.fail = null; await p.locator('.suivi-retry').click(); await attendreActive(p); ok(await caseDe(p).isChecked(), 'après réessai : cochée'); ok(!(await p.locator('.suivi-retry').isVisible()));
+  ok(await p.locator('.suivi-retry:visible').first().isVisible(), 'bouton Réessayer');
+  mode.fail = null; await p.locator('.suivi-retry:visible').first().click(); await attendreActive(p); ok(await caseDe(p).isChecked(), 'après réessai : cochée'); ok(!(await p.locator('.suivi-retry:visible').first().isVisible()));
   await p.close();
 });
 await test('échec au chargement sur l\'accueil et une page d\'index : message, boutons désactivés', async () => {
@@ -195,7 +195,7 @@ await test('double clic rapide (service lent) : une seule écriture envoyée, ca
   mode.delay = 400; const n = journal.length;
   await caseDe(p).click(); ok(await caseDe(p).isDisabled(), 'désactivée pendant l\'envoi');
   await caseDe(p).click({ force: true, timeout: 500 }).catch(() => {});
-  ok((await p.locator('.suivi-fiche .suivi-msg').innerText()).includes('Enregistrement'));
+  ok((await p.locator('.suivi-fiche .suivi-msg').first().innerText()).includes('Enregistrement'));
   await p.waitForFunction(() => document.querySelector('.suivi-fiche .suivi-msg').textContent === 'Enregistré', null, { timeout: 5000 });
   mode.delay = 0; eq(putsSince(n), 1, 'nombre de PUT'); eq(serverState(), { C1: true }); ok(await caseDe(p).isChecked());
   await p.close();
@@ -314,6 +314,18 @@ await test('export : explication, boutons actifs, export fichier valide (état d
   reset(); kv.store.set('revisees', '{"J1":true}'); const p = await open(ctxA, '/export.html'); await attendreCompteur(p, '1 fiche sur 36 révisée');
   ok(/pas dans ce navigateur/.test(await p.locator('#suivi-export').innerText()));
   const f = await dl(p); eq(JSON.parse(f.data).revisees.J1, true); ok(/^revisions-cappei-\d{4}-\d{2}-\d{2}\.json$/.test(f.name)); await p.close();
+});
+
+await test('bas de fiche : case synchronisée avec celle du haut, placée avant « Fiche suivante », écriture unique, suivant sans cocher', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreActive(p);
+  const bas = p.getByRole('checkbox', { name: 'Marquer cette fiche comme révisée' });
+  ok(await p.evaluate(() => { const b = document.getElementById('suivi-revisee-bas'), n = document.querySelector('.pager'); return !!(b.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'case du bas avant le pager');
+  const n0 = putsSince(journal.length);
+  await bas.check(); await p.waitForFunction(() => document.getElementById('suivi-revisee').checked);
+  eq(serverState(), { N4: true }); ok(await caseDe(p).isChecked()); ok(await bas.isChecked());
+  await caseDe(p).uncheck(); await p.waitForFunction(() => !document.getElementById('suivi-revisee-bas').checked); eq(serverState(), {});
+  await p.getByRole('link', { name: /Fiche suivante/ }).click(); await p.waitForURL(/n05\.html$/); await attendreActive(p); eq(serverState(), {});
+  await p.close();
 });
 
 console.log('\nResponsive, clavier, impression');

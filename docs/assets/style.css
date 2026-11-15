@@ -247,3 +247,4 @@ a.ref:hover { text-decoration-style: solid; }
 @media print {
   .suivi-fiche, .suivi-home, .suivi-avis, .suivi-ok { display: none !important; }
 }
+.suivi-fiche-bas { margin: 1.5rem 0 .5rem; }
