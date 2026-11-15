@@ -37,7 +37,7 @@ for (const [file, h] of Object.entries(html)) {
   for (const m of h.matchAll(/\s(?:href|src)="([^"]*)"/g)) {
     const url = m[1];
     if (/^(?:[a-z][a-z0-9+.-]*:)/i.test(url)) { if (!/^data:,?$/.test(url)) fail(`${file} : URL absolue ou non locale ${url}`); continue; }
-    const [p, frag] = url.split('#');
+    const [p, frag] = url.split('#')[0].split('?')[0] === url.split('#')[0] ? url.split('#') : [url.split('#')[0].split('?')[0], url.split('#')[1]];
     const target = p ? path.posix.normalize(path.posix.join(path.posix.dirname(file), p)) : file;
     nLinks++;
     if (!fs.existsSync(path.join(DOCS, target))) { fail(`${file} : lien cassé ${url}`); continue; }
@@ -289,7 +289,7 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     console.log(`  instantané d'avant la fonctionnalité (ref-docs-hashes.json, ${Object.keys(ref).length} fichiers) : ` + (diff.length ? `${diff.length} fichier(s) diffèrent (${diff.slice(0, 4).join(', ')}) : normal si les fiches ou l'anonymisation ont changé depuis ; non bloquant` : 'tous identiques octet pour octet') + `${extra.length ? ' ; fichiers en plus : ' + extra.join(', ') : ''}`);
     if (extra.some(k => k !== 'assets/config.js' && k !== 'mode-emploi.html')) fail('suivi inactif : fichiers en plus de config.js et mode-emploi.html : ' + extra.join(', '));
   }
-  const strip = h => h.replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
+  const strip = h => h.replace(/\?v=[0-9a-f]{8}"/g, '"').replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
   if (/assets\/(?:config|suivi)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
   if (active) {
     // Suivi actif : le HTML ne diffère du HTML inactif que par les deux balises script ; style.css = inactif + suivi.css ; site.js identique.
@@ -297,10 +297,10 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     for (const f of htmlFiles) {
       if (rel(f) === 'export.html') continue;   // page propre au suivi actif
       const h = fs.readFileSync(f, 'utf8');
-      const ref = fs.readFileSync(path.join(tmp, rel(f)), 'utf8');
+      const ref = strip(fs.readFileSync(path.join(tmp, rel(f)), 'utf8'));
       if (strip(h) !== ref) { bad++; fail(`${rel(f)} : le HTML actif diffère du HTML inactif au-delà des balises script`); }
       const up = rel(f).includes('/') ? '../' : '';
-      const order = [`${up}assets/config.js`, `${up}assets/site.js`, `${up}assets/suivi.js`].map(x => h.indexOf(`<script src="${x}" defer></script>`));
+      const order = [`${up}assets/config.js`, `${up}assets/site.js`, `${up}assets/suivi.js`].map(x => h.search(new RegExp('<script src="' + x.replace(/\./g, '\\.') + '\\?v=[0-9a-f]{8}" defer></script>')));
       if (order.some(i => i < 0) || !(order[0] < order[1] && order[1] < order[2])) fail(`${rel(f)} : balises script config.js, site.js, suivi.js absentes ou mal ordonnées`);
     }
     if (sha(fs.readFileSync(path.join(DOCS, 'assets/site.js'))) !== inactif['assets/site.js']) fail('site.js diffère entre suivi actif et inactif');

@@ -289,6 +289,7 @@ ${PARTS.map(part).join('\n')}
 }
 
 const SITE = 'Fiches de révision CAPPEI';
+let ASSET_V = '';                         // empreinte des fichiers de assets/ : change à chaque modification, force le rechargement par les navigateurs
 let ACTIVE_API = API_URL;                 // adresse utilisée par le build en cours (build({ apiUrl }) peut la remplacer : tests)
 function pageShell({ page, title, body, legend, head }) {
   const apiUrl = ACTIVE_API;
@@ -306,9 +307,9 @@ function pageShell({ page, title, body, legend, head }) {
 <meta name="description" content="Fiches de révision CAPPEI : classeur général évolutif, état au 14 novembre 2026.">
 <link rel="icon" href="data:,">
 <script>document.documentElement.className+=' js'</script>
-<link rel="stylesheet" href="${up}assets/style.css">
-${apiUrl ? `<script src="${up}assets/config.js" defer></script>\n` : ''}<script src="${up}assets/site.js" defer></script>
-${apiUrl ? `<script src="${up}assets/suivi.js" defer></script>\n` : ''}</head>
+<link rel="stylesheet" href="${up}assets/style.css?v=${ASSET_V}">
+${apiUrl ? `<script src="${up}assets/config.js?v=${ASSET_V}" defer></script>\n` : ''}<script src="${up}assets/site.js?v=${ASSET_V}" defer></script>
+${apiUrl ? `<script src="${up}assets/suivi.js?v=${ASSET_V}" defer></script>\n` : ''}</head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-header">
@@ -407,6 +408,7 @@ function build(opts) {
   fs.writeFileSync(path.join(out, 'assets', 'site.js'), fs.readFileSync(path.join(ROOT, 'src', 'site.js'), 'utf8'));
   fs.writeFileSync(path.join(out, 'assets', 'config.js'), configJs(ACTIVE_API));
   if (active) fs.writeFileSync(path.join(out, 'assets', 'suivi.js'), fs.readFileSync(path.join(ROOT, 'src', 'suivi.js'), 'utf8'));
+  ASSET_V = require('crypto').createHash('sha256').update(['style.css', 'site.js', 'config.js', 'suivi.js'].map(f => { const q = path.join(out, 'assets', f); return fs.existsSync(q) ? fs.readFileSync(q) : ''; }).join('\0')).digest('hex').slice(0, 8);
   fs.writeFileSync(path.join(out, HOME.file), renderHome());
   fs.writeFileSync(path.join(out, EMPLOI.file), renderEmploi());
   if (active) fs.writeFileSync(path.join(out, EXPORT.file), renderExport());
