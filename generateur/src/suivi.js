@@ -80,6 +80,8 @@
   var courante = menu.querySelector('a[aria-current="page"] .code');
   var codePage = courante && CODES.indexOf(courante.textContent.trim()) !== -1 ? courante.textContent.trim() : null;
   var estAccueil = !!menu.querySelector('.menu-home[aria-current="page"]');
+  var zoneExport = document.getElementById('suivi-export');   // page « Export » (null ailleurs)
+  var estEmploi = !!menu.querySelector('.menu-extra[aria-current="page"]') && !zoneExport;
 
   /* ---------- zone de messages ---------- */
   var statut = el('span', { class: 'suivi-msg', role: 'status', 'aria-live': 'polite' });
@@ -105,7 +107,7 @@
     ]);
     if (h1) { h1.parentNode.insertBefore(boite, h1.nextSibling); } else { main.insertBefore(boite, main.firstChild); }
     coche.addEventListener('change', onCoche);
-  } else if (!estAccueil) {
+  } else if (!estAccueil && !zoneExport && !estEmploi) {
     /* Pages d'index : un message discret en tête de page, vide tant que tout va bien (sur l'accueil, il est dans le bloc de suivi). */
     main.insertBefore(el('p', { class: 'suivi-avis' }, [statut, retry]), main.firstChild);
   }
@@ -126,8 +128,8 @@
     });
   }
 
-  /* ---------- accueil : suivi et sauvegarde ---------- */
-  var home = null;
+  /* ---------- accueil : suivi de la révision ; page Export : copie de sécurité ---------- */
+  var home = null, sauv = null;
   function construireAccueil() {
     var premiere = main.querySelector('.fiches.accueil > .fiche');
     if (!premiere) { return; }
@@ -140,6 +142,10 @@
       el('h2', { id: 'suivi-titre', class: 'suivi-h', text: 'Suivi de la révision' }),
       el('div', { class: 'suivi-corps' }, [resume, el('p', { class: 'suivi-avis' }, [statut, retry]), barre, detail, prochaine, liste]),
     ]);
+    premiere.parentNode.insertBefore(section1, premiere.nextSibling);
+    home = { barre: barre, resume: resume, detail: detail, prochaine: prochaine, liste: liste, section1: section1 };
+  }
+  function construireExport() {
     var bExp = el('button', { type: 'button', class: 'suivi-btn', text: 'Exporter' });
     var bImp = el('button', { type: 'button', class: 'suivi-btn', text: 'Importer…' });
     var fichier = el('input', { type: 'file', accept: '.json,application/json', class: 'suivi-fichier', tabindex: '-1', 'aria-hidden': 'true' });
@@ -147,25 +153,20 @@
     var msgSauvEl = el('p', { class: 'suivi-msg suivi-msg-sauv', role: 'status', 'aria-live': 'polite' });
     var confirmation = el('div', { class: 'suivi-confirm', role: 'group', 'aria-labelledby': 'suivi-confirm-t' });
     confirmation.hidden = true;
-    var section2 = el('section', { class: 'fiche suivi-home cat-classeur', 'aria-labelledby': 'suivi-sauv-titre' }, [
-      el('h2', { id: 'suivi-sauv-titre', class: 'suivi-h', text: 'Sauvegarde' }),
-      el('div', { class: 'suivi-corps' }, [
-        el('p', { text: 'Le suivi est enregistré sur un service en ligne, pas dans ce navigateur. Exportez-le de temps en temps pour en garder une copie ; importer un fichier remplace tout le suivi actuel.' }),
-        el('p', { class: 'suivi-actions' }, [bExp, bImp, fichier]), confirmation, msgSauvEl,
-      ]),
-    ]);
-    premiere.parentNode.insertBefore(section1, premiere.nextSibling);
-    section1.parentNode.insertBefore(section2, section1.nextSibling);
-    home = { barre: barre, resume: resume, detail: detail, prochaine: prochaine, liste: liste, bExp: bExp, bImp: bImp, fichier: fichier, msg: msgSauvEl, confirmation: confirmation, section1: section1 };
+    zoneExport.textContent = '';
+    [el('p', { class: 'suivi-avis' }, [statut, retry]),
+     el('p', { text: 'Le suivi est enregistré sur un service en ligne, pas dans ce navigateur. Exportez-le de temps en temps pour en garder une copie ; importer un fichier remplace tout le suivi actuel.' }),
+     el('p', { class: 'suivi-actions' }, [bExp, bImp, fichier]), confirmation, msgSauvEl].forEach(function (n) { zoneExport.appendChild(n); });
+    sauv = { bExp: bExp, bImp: bImp, fichier: fichier, msg: msgSauvEl, confirmation: confirmation };
 
     bExp.addEventListener('click', exporter);
     bImp.addEventListener('click', function () { if (!bImp.disabled) { fichier.value = ''; fichier.click(); } });
     fichier.addEventListener('change', function () { if (fichier.files && fichier.files[0]) { importer(fichier.files[0]); } });
   }
   function majAccueil() {
-    if (!home) { return; }
     var pret = !chargement && !indispo;
-    home.bExp.disabled = !pret || occupe; home.bImp.disabled = !pret || occupe;
+    if (sauv) { sauv.bExp.disabled = !pret || occupe; sauv.bImp.disabled = !pret || occupe; }
+    if (!home) { return; }
     if (!pret) {
       home.resume.textContent = chargement ? 'Chargement du suivi…' : '';
       home.barre.hidden = true; home.detail.textContent = ''; home.prochaine.textContent = ''; home.liste.hidden = true;
@@ -233,7 +234,7 @@
   }
 
   function dateLocale() { var d = new Date(); var p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
-  function msgSauv(txt, erreur) { home.msg.textContent = txt; home.msg.classList.toggle('suivi-erreur', !!erreur); }
+  function msgSauv(txt, erreur) { sauv.msg.textContent = txt; sauv.msg.classList.toggle('suivi-erreur', !!erreur); }
   function bloquer(b) { occupe = b; rendre(); }
 
   function exporter() {
@@ -269,8 +270,8 @@
   }
 
   function fermerConfirmation(focusBtn) {
-    home.confirmation.hidden = true; home.confirmation.textContent = '';
-    if (focusBtn) { home.bImp.focus(); }
+    sauv.confirmation.hidden = true; sauv.confirmation.textContent = '';
+    if (focusBtn) { sauv.bImp.focus(); }
   }
   function importer(fic) {
     if (occupe) { return; }
@@ -291,7 +292,7 @@
   }
   function proposer(nouveau, avant) {
     var apres = countTrue(nouveau);
-    var c = home.confirmation; c.textContent = '';
+    var c = sauv.confirmation; c.textContent = '';
     var ok = el('button', { type: 'button', class: 'suivi-btn suivi-btn-danger', text: 'Remplacer' });
     var non = el('button', { type: 'button', class: 'suivi-btn', text: 'Annuler' });
     c.appendChild(el('p', { id: 'suivi-confirm-t', class: 'suivi-confirm-t', text: 'Remplacer le suivi actuel ? Fiches révisées : ' + avant + ' avant, ' + apres + ' après (sur ' + TOTAL + ').' }));
@@ -333,5 +334,6 @@
   window.addEventListener('pageshow', function (e) { if (e.persisted) { derniereLecture = 0; rafraichir(); } });
 
   if (estAccueil) { construireAccueil(); }
+  if (zoneExport) { construireExport(); }
   charger();
 })();

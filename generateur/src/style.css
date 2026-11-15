@@ -30,9 +30,10 @@ main { padding: 0 1.5rem 2rem; min-width: 0; }
 .scrim { display: none; }
 
 /* Menu latéral */
-.menu-home { display: block; padding: .6rem .9rem; font-weight: 700; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
-.menu-home:hover, .menu-list a:hover { background: #eef1f4; }
-.menu-home[aria-current="page"] { background: #eceff1; box-shadow: inset 6px 0 #37474f; }
+.menu-home, .menu-extra { display: block; padding: .6rem .9rem; font-weight: 700; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
+.menu-home:hover, .menu-extra:hover, .menu-list a:hover { background: #eef1f4; }
+.menu-extra { font-weight: 600; }
+.menu-home[aria-current="page"], .menu-extra[aria-current="page"] { background: #eceff1; box-shadow: inset 6px 0 #37474f; }
 .menu-part { border-bottom: 1px solid #dde2e6; }
 .menu-part > summary { cursor: pointer; padding: .55rem .9rem; font-weight: 700; border-left: 6px solid var(--c); list-style: none; display: flex; align-items: center; gap: .5rem; }
 .menu-part > summary::-webkit-details-marker { display: none; }

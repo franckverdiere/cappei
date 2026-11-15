@@ -127,7 +127,8 @@ const expectedPages = [];
 for (const [b, fs_] of groups) expectedPages.push({ file: `fiches/${slug(b)}.html`, fiches: fs_, legend: legendOf(b), label: b });
 expectedPages.push({ file: 'index-auteurs.html', fiches: indexFiches.slice(0, 4), legend: null, label: 'index-auteurs' });
 expectedPages.push({ file: 'index-sigles.html', fiches: indexFiches.slice(4), legend: null, label: 'index-sigles' });
-expectedPages.push({ file: 'index.html', fiches: [site.cover1, site.cover2], legend: null, label: 'accueil' });
+expectedPages.push({ file: 'index.html', fiches: [site.coverHome(), site.cover2], legend: null, label: 'accueil' });
+expectedPages.push({ file: 'mode-emploi.html', fiches: [site.coverEmploi()], legend: null, label: 'mode-emploi' });
 for (const p of expectedPages) {
   const h = html[p.file];
   if (!h) { fail('page absente : ' + p.file); continue; }
@@ -171,7 +172,7 @@ section('(d) Nombre de pages');
   const nN = themes.filter(f => /\/n\d\d\.html$/.test(f)).length, nP = themes.filter(f => /\/p\d\d\.html$/.test(f)).length;
   const idx = ['index-auteurs.html', 'index-sigles.html'].filter(f => html[f]).length, home = html['index.html'] ? 1 : 0;
   console.log(`  J=${nJ} C=${nC} N=${nN} P=${nP} index=${idx} accueil=${home} total=${htmlFiles.length}`);
-  if (nJ !== 6 || nC !== 7 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 39) fail('nombre de pages inattendu (attendu 6+7+16+7+2+1 = 39)');
+  if (nJ !== 6 || nC !== 7 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 39 + 1 + (html['export.html'] ? 1 : 0)) fail('nombre de pages inattendu (attendu 6+7+16+7+2+1 = 39, + mode d’emploi, + export si le suivi est actif)');
   const attendu = b => /^J/.test(b) ? 1 : ({ C2: 1, C3: 1, C4: 1, C5: 3 }[b] || 2);
   for (const [b, fs_] of groups) if (fs_.length !== attendu(b)) fail(`${b} : ${fs_.length} volets (attendu ${attendu(b)})`);
   const att = ['.nojekyll', 'assets/style.css', 'assets/site.js'].filter(f => !fs.existsSync(path.join(DOCS, f)));
@@ -286,14 +287,15 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     const extra = Object.keys(inactif).filter(k => !(k in ref));
     // Instantané pris juste avant l'ajout de la fonctionnalité : à titre d'information seulement (il diverge dès que les fiches ou anonymisation.json changent).
     console.log(`  instantané d'avant la fonctionnalité (ref-docs-hashes.json, ${Object.keys(ref).length} fichiers) : ` + (diff.length ? `${diff.length} fichier(s) diffèrent (${diff.slice(0, 4).join(', ')}) : normal si les fiches ou l'anonymisation ont changé depuis ; non bloquant` : 'tous identiques octet pour octet') + `${extra.length ? ' ; fichiers en plus : ' + extra.join(', ') : ''}`);
-    if (extra.some(k => k !== 'assets/config.js')) fail('suivi inactif : fichiers en plus de config.js : ' + extra.join(', '));
+    if (extra.some(k => k !== 'assets/config.js' && k !== 'mode-emploi.html')) fail('suivi inactif : fichiers en plus de config.js et mode-emploi.html : ' + extra.join(', '));
   }
-  const strip = h => h.replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '');
+  const strip = h => h.replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
   if (/assets\/(?:config|suivi)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
   if (active) {
     // Suivi actif : le HTML ne diffère du HTML inactif que par les deux balises script ; style.css = inactif + suivi.css ; site.js identique.
     let bad = 0;
     for (const f of htmlFiles) {
+      if (rel(f) === 'export.html') continue;   // page propre au suivi actif
       const h = fs.readFileSync(f, 'utf8');
       const ref = fs.readFileSync(path.join(tmp, rel(f)), 'utf8');
       if (strip(h) !== ref) { bad++; fail(`${rel(f)} : le HTML actif diffère du HTML inactif au-delà des balises script`); }
@@ -303,7 +305,7 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     }
     if (sha(fs.readFileSync(path.join(DOCS, 'assets/site.js'))) !== inactif['assets/site.js']) fail('site.js diffère entre suivi actif et inactif');
     if (!fs.readFileSync(path.join(DOCS, 'assets/style.css'), 'utf8').startsWith(fs.readFileSync(path.join(tmp, 'assets/style.css'), 'utf8'))) fail('style.css actif ne commence pas par le style.css inactif');
-    console.log(`  suivi actif : HTML des ${htmlFiles.length} pages = HTML inactif + 2 balises script (config.js avant site.js, suivi.js après) ; site.js identique ; style.css = inactif + suivi.css`);
+    console.log(`  suivi actif : HTML des ${htmlFiles.length - 1} pages (hors export.html) = HTML inactif + 2 balises script + lien et phrase « Export » (config.js avant site.js, suivi.js après) ; site.js identique ; style.css = inactif + suivi.css`);
   } else {
     for (const f of htmlFiles) if (sha(fs.readFileSync(f)) !== inactif[rel(f)]) fail(rel(f) + ' : diffère de la construction avec apiUrl vide');
     console.log(`  suivi inactif : les ${htmlFiles.length} pages HTML sont identiques octet pour octet à une construction avec apiUrl vide ; aucune balise script ajoutée`);
