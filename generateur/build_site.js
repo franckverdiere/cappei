@@ -9,7 +9,22 @@ const path = require('path');
 
 const SRC = process.env.FICHES_DIR || '/home/claude/atelier/fiches';
 const ROOT = __dirname;
-const OUT = path.join(ROOT, 'docs');
+const OUT = process.env.OUT_DIR ? path.resolve(process.env.OUT_DIR) : path.join(ROOT, 'docs');
+
+/* ------------------------------------------------------------------ Configuration du suivi « fiche révisée » */
+/* config.json { "apiUrl": "" } ; la variable d'environnement API_URL (même vide) l'emporte. apiUrl vide = fonctionnalité inactive. */
+function loadApiUrl() {
+  let v = '';
+  try { v = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8')).apiUrl; }
+  catch (e) { if (e.code !== 'ENOENT') throw new Error('config.json : ' + e.message); }
+  if (process.env.API_URL !== undefined) v = process.env.API_URL;
+  if (v === undefined || v === null) v = '';
+  if (typeof v !== 'string') throw new Error('config.json : apiUrl doit être du texte');
+  v = v.trim().replace(/\/+$/, '');
+  if (v && !/^https:\/\/[^\s\/]+/i.test(v) && !/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(v)) throw new Error('apiUrl doit commencer par https:// (http:// accepté seulement pour localhost) : ' + v);
+  return v;
+}
+const API_URL = loadApiUrl();
 
 const { CAT, RUB } = require(path.join(SRC, 'kit'));
 const { LEGEND, jury } = require(path.join(SRC, 'jury'));
@@ -271,7 +286,9 @@ ${PARTS.map(part).join('\n')}
 }
 
 const SITE = 'Fiches de révision CAPPEI';
+let ACTIVE_API = API_URL;                 // adresse utilisée par le build en cours (build({ apiUrl }) peut la remplacer : tests)
 function pageShell({ page, title, body, legend, head }) {
+  const apiUrl = ACTIVE_API;
   const up = path.posix.dirname(page.file) === '.' ? '' : '../';
   const idx = sequence.indexOf(page);
   const prev = page === HOME ? null : (idx > 0 ? sequence[idx - 1] : HOME), next = page === HOME ? sequence[0] : sequence[idx + 1];
@@ -287,8 +304,8 @@ function pageShell({ page, title, body, legend, head }) {
 <link rel="icon" href="data:,">
 <script>document.documentElement.className+=' js'</script>
 <link rel="stylesheet" href="${up}assets/style.css">
-<script src="${up}assets/site.js" defer></script>
-</head>
+${apiUrl ? `<script src="${up}assets/config.js" defer></script>\n` : ''}<script src="${up}assets/site.js" defer></script>
+${apiUrl ? `<script src="${up}assets/suivi.js" defer></script>\n` : ''}</head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-header">
@@ -352,23 +369,33 @@ function colorCss() {
 }
 
 /* ------------------------------------------------------------------ Écriture */
-function build() {
-  fs.rmSync(OUT, { recursive: true, force: true });
-  fs.mkdirSync(path.join(OUT, 'fiches'), { recursive: true });
-  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
-  fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
-  fs.writeFileSync(path.join(OUT, 'assets', 'style.css'), colorCss() + fs.readFileSync(path.join(ROOT, 'src', 'style.css'), 'utf8'));
-  fs.writeFileSync(path.join(OUT, 'assets', 'site.js'), fs.readFileSync(path.join(ROOT, 'src', 'site.js'), 'utf8'));
-  fs.writeFileSync(path.join(OUT, HOME.file), renderHome());
-  for (const p of sequence) fs.writeFileSync(path.join(OUT, p.file), renderPage(p));
-  return { pages: sequence.length + 1, refs: REFLOG.length };
+function build(opts) {
+  opts = opts || {};
+  const out = opts.out ? path.resolve(opts.out) : OUT;
+  ACTIVE_API = opts.apiUrl !== undefined ? opts.apiUrl : API_URL;
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.mkdirSync(path.join(out, 'fiches'), { recursive: true });
+  fs.mkdirSync(path.join(out, 'assets'), { recursive: true });
+  fs.writeFileSync(path.join(out, '.nojekyll'), '');
+  const active = !!ACTIVE_API;
+  // Suivi inactif (apiUrl vide) : style.css et site.js sont identiques octet pour octet à ceux d'avant la fonctionnalité ; seul config.js s'ajoute (non référencé par les pages).
+  fs.writeFileSync(path.join(out, 'assets', 'style.css'), colorCss() + fs.readFileSync(path.join(ROOT, 'src', 'style.css'), 'utf8') + (active ? '\n' + fs.readFileSync(path.join(ROOT, 'src', 'suivi.css'), 'utf8') : ''));
+  fs.writeFileSync(path.join(out, 'assets', 'site.js'), fs.readFileSync(path.join(ROOT, 'src', 'site.js'), 'utf8'));
+  fs.writeFileSync(path.join(out, 'assets', 'config.js'), configJs(ACTIVE_API));
+  if (active) fs.writeFileSync(path.join(out, 'assets', 'suivi.js'), fs.readFileSync(path.join(ROOT, 'src', 'suivi.js'), 'utf8'));
+  fs.writeFileSync(path.join(out, HOME.file), renderHome());
+  for (const p of sequence) fs.writeFileSync(path.join(out, p.file), renderPage(p));
+  return { pages: sequence.length + 1, refs: REFLOG.length, out, active };
 }
+/* Les 36 codes de pages de fiches (J, C, N, P), dans l'ordre du site : copiés dans config.js pour valider l'import côté navigateur. */
+const CODES = pages.map(p => p.code);
+const configJs = api => '/* Généré par build_site.js (config.json / API_URL). Adresse vide = suivi « fiche révisée » inactif. */\nwindow.CAPPEI_API = ' + JSON.stringify(api) + ';\nwindow.CAPPEI_CODES = ' + JSON.stringify(CODES) + ';\n';
 
-module.exports = { anonymise: t => anonymise(t), anonymiseWith, loadAnonymisationList, cover1, cover2, pages, indexPages, sequence, REFLOG, REF_UNKNOWN, COLOR_CHANGES, CATC, build };
+module.exports = { CODES, API_URL, anonymise: t => anonymise(t), anonymiseWith, loadAnonymisationList, cover1, cover2, pages, indexPages, sequence, REFLOG, REF_UNKNOWN, COLOR_CHANGES, CATC, build };
 
 if (require.main === module) {
   const r = build();
-  console.log(`Site généré dans ${OUT} : ${r.pages} pages, ${r.refs} renvois transformés en liens, ${REF_UNKNOWN.length} candidats sans page.`);
+  console.log(`Site généré dans ${OUT} : ${r.pages} pages, ${r.refs} renvois transformés en liens, ${REF_UNKNOWN.length} candidats sans page. Suivi « fiche révisée » : ${r.active ? 'ACTIF (' + ACTIVE_API + ')' : 'inactif (apiUrl vide)'}.`);
   if (COLOR_CHANGES.length) console.log('Couleurs assombries (contraste AA) :\n  ' + COLOR_CHANGES.join('\n  '));
   fs.writeFileSync(path.join(ROOT, 'renvois.log.json'), JSON.stringify({ liens: REFLOG, sansPage: REF_UNKNOWN }, null, 1));
 }

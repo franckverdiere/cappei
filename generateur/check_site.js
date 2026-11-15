@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SRC = process.env.FICHES_DIR || '/home/claude/atelier/fiches';
-const DOCS = path.join(__dirname, 'docs');
+const DOCS = process.env.OUT_DIR ? path.resolve(process.env.OUT_DIR) : path.join(__dirname, 'docs');
 const site = require('./build_site'); // ne régénère rien (build() n'est appelé que par `node build_site.js`)
 const { CAT } = require(path.join(SRC, 'kit'));
 const { LEGEND, jury } = require(path.join(SRC, 'jury'));
@@ -49,9 +49,10 @@ for (const [file, h] of Object.entries(html)) {
     if (url.startsWith('/')) fail(`${file} : lien absolu ${url} (doit être relatif)`);
   }
 }
-for (const f of ['assets/style.css', 'assets/site.js']) {
+for (const f of ['assets/style.css', 'assets/site.js', 'assets/suivi.js']) {
+  if (!fs.existsSync(path.join(DOCS, f))) continue;     // suivi.js n'existe que si le suivi est actif
   const t = fs.readFileSync(path.join(DOCS, f), 'utf8');
-  if (/https?:\/\/|@import|url\(/i.test(t)) fail(`${f} : ressource externe ou url() détectée`);
+  if (/https?:\/\/|@import|(?<![A-Za-z])url\(/i.test(t)) fail(`${f} : ressource externe ou url() détectée`);
 }
 console.log(`  ${nLinks} liens/ressources vérifiés dont ${nAnch} ancres`);
 
@@ -244,6 +245,91 @@ section('(g) Repères [TAG] absents des légendes (information, aucune correctio
   }
   const all = {}; Object.entries(tagsByPage).forEach(([k, v]) => v.forEach(t => (all[t] = all[t] || []).push(k)));
   console.log('  ' + (Object.keys(all).length ? Object.entries(all).map(([t, ps]) => `${t} (${ps.length} page(s))`).join(', ') : 'aucun'));
+}
+
+/* ------------------------------------------------------------ (h) Suivi « fiche révisée » */
+section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = site d\'avant, cohérence des codes');
+{
+  const crypto = require('crypto');
+  const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+  const assetFiles = files.filter(f => rel(f).startsWith('assets/') && f.endsWith('.js'));
+  const configTxt = fs.existsSync(path.join(DOCS, 'assets/config.js')) ? fs.readFileSync(path.join(DOCS, 'assets/config.js'), 'utf8') : '';
+  const apiM = configTxt.match(/window\.CAPPEI_API = ("(?:[^"\\]|\\.)*");/);
+  const active = !!(apiM && JSON.parse(apiM[1]));
+  console.log('  suivi dans docs/ : ' + (active ? 'ACTIF (' + JSON.parse(apiM[1]) + ')' : 'inactif (apiUrl vide)'));
+
+  // (a) aucun stockage navigateur dans assets/ ni dans le HTML. Seule exception, ancienne et sans lien avec le suivi :
+  //     site.js mémorise l'ouverture des parties du menu dans sessionStorage (clé « cappei-menu-v1 ») ; tout autre usage échoue.
+  const FORBID = /\b(?:localStorage|indexedDB|caches|openDatabase)\b|\bdocument\.cookie\b|\bcookieStore\b|\bsessionStorage\b/g;
+  let nExc = 0;
+  for (const f of [...assetFiles, ...htmlFiles]) {
+    const t = fs.readFileSync(f, 'utf8');
+    for (const m of t.matchAll(FORBID)) {
+      const line = t.slice(t.lastIndexOf('\n', m.index) + 1, t.indexOf('\n', m.index) === -1 ? undefined : t.indexOf('\n', m.index));
+      if (rel(f) === 'assets/site.js' && m[0] === 'sessionStorage' && /KEY|cappei-menu-v1|saved/.test(line + t.slice(0, 800))) { nExc++; continue; }
+      fail(`${rel(f)} : usage de « ${m[0]} » interdit (suivi sans stockage navigateur) : ${line.trim().slice(0, 100)}`);
+    }
+  }
+  console.log(`  aucun usage de localStorage/indexedDB/cookie/Cache API dans assets/ et le HTML ; ${nExc} mention(s) de sessionStorage tolérée(s) (mémoire d'ouverture du menu, site.js d'origine, hors suivi)`);
+  const suiviJs = path.join(DOCS, 'assets/suivi.js');
+  if (fs.existsSync(suiviJs) && /sessionStorage/.test(fs.readFileSync(suiviJs, 'utf8'))) fail('suivi.js ne doit pas toucher sessionStorage');
+
+  // (b) suivi inactif = site d'avant. Construction de référence avec apiUrl vide dans un dossier temporaire.
+  const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cappei-inactif-'));
+  site.build({ out: tmp, apiUrl: '' });
+  const hashDir = d => { const o = {}; for (const f of walk(d)) o[path.relative(d, f).split(path.sep).join('/')] = sha(fs.readFileSync(f)); return o; };
+  const inactif = hashDir(tmp);
+  const refFile = path.join(__dirname, 'ref-docs-hashes.json');
+  if (fs.existsSync(refFile)) {
+    const ref = JSON.parse(fs.readFileSync(refFile, 'utf8'));
+    const diff = Object.keys(ref).filter(k => inactif[k] !== ref[k]);
+    const extra = Object.keys(inactif).filter(k => !(k in ref));
+    // Instantané pris juste avant l'ajout de la fonctionnalité : à titre d'information seulement (il diverge dès que les fiches ou anonymisation.json changent).
+    console.log(`  instantané d'avant la fonctionnalité (ref-docs-hashes.json, ${Object.keys(ref).length} fichiers) : ` + (diff.length ? `${diff.length} fichier(s) diffèrent (${diff.slice(0, 4).join(', ')}) : normal si les fiches ou l'anonymisation ont changé depuis ; non bloquant` : 'tous identiques octet pour octet') + `${extra.length ? ' ; fichiers en plus : ' + extra.join(', ') : ''}`);
+    if (extra.some(k => k !== 'assets/config.js')) fail('suivi inactif : fichiers en plus de config.js : ' + extra.join(', '));
+  }
+  const strip = h => h.replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '');
+  if (/assets\/(?:config|suivi)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
+  if (active) {
+    // Suivi actif : le HTML ne diffère du HTML inactif que par les deux balises script ; style.css = inactif + suivi.css ; site.js identique.
+    let bad = 0;
+    for (const f of htmlFiles) {
+      const h = fs.readFileSync(f, 'utf8');
+      const ref = fs.readFileSync(path.join(tmp, rel(f)), 'utf8');
+      if (strip(h) !== ref) { bad++; fail(`${rel(f)} : le HTML actif diffère du HTML inactif au-delà des balises script`); }
+      const up = rel(f).includes('/') ? '../' : '';
+      const order = [`${up}assets/config.js`, `${up}assets/site.js`, `${up}assets/suivi.js`].map(x => h.indexOf(`<script src="${x}" defer></script>`));
+      if (order.some(i => i < 0) || !(order[0] < order[1] && order[1] < order[2])) fail(`${rel(f)} : balises script config.js, site.js, suivi.js absentes ou mal ordonnées`);
+    }
+    if (sha(fs.readFileSync(path.join(DOCS, 'assets/site.js'))) !== inactif['assets/site.js']) fail('site.js diffère entre suivi actif et inactif');
+    if (!fs.readFileSync(path.join(DOCS, 'assets/style.css'), 'utf8').startsWith(fs.readFileSync(path.join(tmp, 'assets/style.css'), 'utf8'))) fail('style.css actif ne commence pas par le style.css inactif');
+    console.log(`  suivi actif : HTML des ${htmlFiles.length} pages = HTML inactif + 2 balises script (config.js avant site.js, suivi.js après) ; site.js identique ; style.css = inactif + suivi.css`);
+  } else {
+    for (const f of htmlFiles) if (sha(fs.readFileSync(f)) !== inactif[rel(f)]) fail(rel(f) + ' : diffère de la construction avec apiUrl vide');
+    console.log(`  suivi inactif : les ${htmlFiles.length} pages HTML sont identiques octet pour octet à une construction avec apiUrl vide ; aucune balise script ajoutée`);
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+
+  // (c) codes : config.js == pages du site == liste du Worker
+  const cm = configTxt.match(/window\.CAPPEI_CODES = (\[[^\]]*\]);/);
+  const cfgCodes = cm ? JSON.parse(cm[1]) : [];
+  const wsrc = fs.readFileSync(path.join(__dirname, 'worker', 'worker.mjs'), 'utf8');
+  const wm = wsrc.match(/export const CODES = \[([\s\S]*?)\];/);
+  const wCodes = wm ? [...wm[1].matchAll(/'([A-Z]\d+)'/g)].map(x => x[1]) : [];
+  const siteCodes = [...groups.keys()];
+  const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  if (cfgCodes.length !== 36 || !same(cfgCodes, siteCodes)) fail('config.js : CAPPEI_CODES différent des pages du site');
+  if (wCodes.length !== 36 || !same(wCodes, siteCodes)) fail('worker.mjs : CODES différent des pages du site');
+  console.log(`  codes : config.js (${cfgCodes.length}) = pages du site (${siteCodes.length}) = Worker (${wCodes.length})`);
+
+  // (d) contrastes des couleurs ajoutées (AA, 4,5:1) : texte sur blanc, bouton rouge, bandeau « classeur »
+  const cssTxt = fs.readFileSync(path.join(__dirname, 'src', 'suivi.css'), 'utf8');
+  const L = h => { const c = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+  const cr = (a, b) => { const x = L(a), y = L(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+  const pick = n => (cssTxt.match(new RegExp('--' + n + ': #([0-9a-fA-F]{6})')) || [])[1];
+  const pairs = [['texte « révisée » du menu', pick('suivi-ok'), 'FFFFFF'], ['message d\'erreur', pick('suivi-err'), 'FFFFFF'], ['bouton Remplacer', 'FFFFFF', '8A1C1C'], ['texte sur l\'encadré de confirmation', '1F2933', 'FFF7E0'], ['texte d\'état désactivé', '4D5864', 'FFFFFF'], ['bandeau des blocs de l\'accueil', 'FFFFFF', site.CATC.classeur.color]];
+  for (const [nom, a, b] of pairs) { const r = cr(a, b); if (r < 4.5) fail(`contraste insuffisant (${r.toFixed(2)}) : ${nom}`); }
+  console.log('  contrastes AA : ' + pairs.map(([n, a, b]) => cr(a, b).toFixed(1)).join(' / ') + ' (≥ 4,5 requis)');
 }
 
 console.log('\n' + (failures ? `RÉSULTAT : ${failures} échec(s)` : 'RÉSULTAT : tous les contrôles passent'));

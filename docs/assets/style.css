@@ -184,3 +184,65 @@ a.ref:hover { text-decoration-style: solid; }
   .legende { font-size: 7.5pt; color: #333; }
 }
 @media (max-width: 30rem) { .brand { font-size: .95rem; line-height: 1.15; } }
+
+/* Suivi « fiche révisée » (ajouté à la feuille de style seulement si le suivi est actif). Couleurs : AA sur fond blanc. */
+:root { --suivi-ok: #14602f; --suivi-err: #9b1c1c; --suivi-btn: #37474f; }
+
+/* Case de la fiche, sous le titre de page */
+.suivi-fiche { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .9rem; margin: .5rem 0 .2rem; }
+.suivi-ligne { display: inline-flex; align-items: center; gap: .6rem; min-height: 2.75rem; padding: .25rem .9rem .25rem .7rem; background: #fff; border: 2px solid var(--c); border-radius: .5rem; }
+.suivi-ligne label { cursor: pointer; font-weight: 700; color: var(--fg); padding: .35rem 0; }
+.suivi-case { width: 1.4rem; height: 1.4rem; margin: 0; accent-color: var(--c); cursor: pointer; flex: none; }
+.suivi-case:disabled, .suivi-case:disabled + label { cursor: default; }
+.suivi-case:disabled + label { color: var(--muted); font-weight: 400; }
+.suivi-msg { font-size: .92rem; color: var(--muted); }
+.suivi-msg:empty { display: none; }
+.suivi-msg.suivi-erreur { color: var(--suivi-err); font-weight: 700; }
+.suivi-avis { margin: .4rem 0 0; font-size: .92rem; }
+.suivi-avis:not(:has(.suivi-msg:not(:empty))) { margin: 0; }
+
+/* Boutons */
+.suivi-btn { font: inherit; font-size: .95rem; font-weight: 600; min-height: 2.5rem; padding: .3rem .9rem; color: var(--fg); background: #fff; border: 2px solid var(--suivi-btn); border-radius: .4rem; cursor: pointer; }
+.suivi-btn:hover:not(:disabled) { background: #eef1f4; }
+.suivi-btn:disabled { color: #5d6670; border-color: #8c969f; cursor: default; }
+.suivi-btn-danger { color: #fff; background: #8a1c1c; border-color: #8a1c1c; }
+.suivi-btn-danger:hover:not(:disabled) { background: #6f1515; }
+.suivi-btn-danger:disabled { color: #fff; background: #a46a6a; border-color: #a46a6a; }
+.suivi-retry[hidden] { display: none; }
+
+/* Menu latéral : coche des fiches révisées */
+.suivi-ok { color: var(--suivi-ok); font-weight: 700; white-space: nowrap; }
+
+/* Accueil */
+.suivi-home { margin-top: 0; }
+.suivi-h { margin: 0; padding: .7rem 1.25rem .8rem; background: var(--c); color: #fff; font-size: 1.35rem; line-height: 1.2; }
+.suivi-corps { padding: .5rem 1.25rem 1.1rem; }
+.suivi-corps p { margin: .4rem 0; }
+.suivi-resume { font-size: 1.15rem; }
+.suivi-barre { height: 1.1rem; margin: .5rem 0 .8rem; background: #e4e8ec; border: 2px solid var(--suivi-btn); border-radius: .6rem; overflow: hidden; }
+.suivi-barre[hidden] { display: none; }
+.suivi-barre-rempli { display: block; height: 100%; width: 0; background: var(--suivi-ok); transition: width .2s; }
+.suivi-parties { list-style: none; margin: 0 0 .6rem; padding: 0; max-width: 34rem; }
+.suivi-parties li { display: flex; justify-content: space-between; gap: 1rem; padding: .25rem 0; border-bottom: 1px solid #dde2e6; }
+.suivi-part-n { font-weight: 700; white-space: nowrap; }
+.suivi-liste { margin: .4rem 0 0; }
+.suivi-liste[hidden] { display: none; }
+.suivi-liste > summary { cursor: pointer; font-weight: 700; padding: .3rem 0; }
+.suivi-restantes { margin: .3rem 0 0; padding-left: 1.2rem; columns: 2 16rem; }
+.suivi-restantes li { margin: .15rem 0; break-inside: avoid; }
+.suivi-actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.suivi-fichier[hidden] { display: none; }
+.suivi-confirm { margin: .5rem 0; padding: .6rem .9rem; background: #fff7e0; border: 2px solid #7a5a00; border-left-width: 6px; }
+.suivi-confirm[hidden] { display: none; }
+.suivi-confirm p { margin: .2rem 0; }
+.suivi-confirm-t { font-weight: 700; }
+.suivi-msg-sauv { font-size: 1rem; margin: .5rem 0 0; }
+
+@media (max-width: 59.99rem) {
+  .suivi-h { padding: .6rem .9rem .7rem; font-size: 1.2rem; }
+  .suivi-corps { padding: .4rem .9rem 1rem; }
+}
+@media (forced-colors: active) { .suivi-barre-rempli { background: Highlight; } .suivi-ligne, .suivi-confirm { border-color: CanvasText; } }
+@media print {
+  .suivi-fiche, .suivi-home, .suivi-avis, .suivi-ok { display: none !important; }
+}
