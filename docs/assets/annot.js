@@ -92,7 +92,6 @@
     var resumeEl = el('p', { class: 'annot-resume' });
     var orphBox = el('div', { class: 'annot-orphelines', role: 'region', 'aria-label': 'Annotations à rattacher' }); orphBox.hidden = true;
     var tete = el('div', { class: 'annot-tete' }, [
-      el('p', { class: 'annot-aide', text: 'Pour surligner ou commenter, sélectionnez un passage de la fiche ; touchez un surlignage pour lire son commentaire ou le modifier.' }),
       resumeEl, el('p', {}, [msg, ' ', retry]), orphBox,
     ]);
     var suiviHaut = main.querySelector('.page-head .suivi-fiche');
@@ -395,7 +394,20 @@
         barre.appendChild(el('button', { type: 'button', class: 'annot-btn annot-btn-petit', 'data-action': 'commenter', text: 'Commenter…' }));
       }
       barre.appendChild(el('button', { type: 'button', class: 'annot-btn annot-btn-petit', 'data-action-fermer': '', 'aria-label': 'Fermer la barre', text: '✕' }));
-      barre.hidden = false; majBarre();
+      barre.hidden = false; majBarre(); placerBarre();
+    }
+    /* La barre est en haut de l'écran (sous le bandeau du site) : en bas, la fenêtre système d'Android ouverte pendant
+       une sélection la recouvrirait. Si le passage sélectionné est sous la barre, elle se place juste en dessous de lui
+       (en laissant la place du menu Copier / Partager du navigateur). */
+    function placerBarre() {
+      barre.style.top = '';
+      if (barre.hidden) { return; }
+      var sel = window.getSelection();
+      if (!sel || !sel.rangeCount || sel.isCollapsed) { return; }
+      var r = sel.getRangeAt(0).getBoundingClientRect(), b = barre.getBoundingClientRect();
+      if (r.height && r.top < b.bottom + 8 && r.bottom > b.top - 8) {
+        barre.style.top = Math.round(Math.max(b.top, Math.min(r.bottom + 64, window.innerHeight * 0.5))) + 'px';
+      }
     }
     function cacherBarre() { barre.hidden = true; etatBarre = null; selCourante = null; }
     var timerSel = null, timerCache = null;
@@ -499,6 +511,7 @@
         enregistrer(nouveauPassage(s, couleurChoisie(form, 1), champ.ta.value)).then(function () { fermerDialogue(); viderSelection(); cacherBarre(); }, function (err) { dialogueEchec(m, err, [ok, annuler]); });
       });
       barre.hidden = true;
+      viderSelection();   // ferme aussi la fenêtre système de sélection d'Android, qui recouvrirait le dialogue (la sélection est gardée dans « s »)
       ouvrirDialogue(form, champ.ta);
     }
 
@@ -625,7 +638,7 @@
     main.addEventListener('focusin', function (e) { var c = e.target.closest && e.target.closest('.annot-bulle'); if (c) { montrerInfo(c); } });
     main.addEventListener('focusout', function () { cacherInfo(); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { cacherInfo(); if (!dlgOuvert && !barre.hidden) { cacherBarre(); } } });
-    window.addEventListener('scroll', cacherInfo, { passive: true });
+    window.addEventListener('scroll', function () { cacherInfo(); if (!barre.hidden) { placerBarre(); } }, { passive: true });
 
     /* ---------- chargement initial et rafraîchissement ---------- */
     function charger() {

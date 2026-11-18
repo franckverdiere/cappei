@@ -321,9 +321,10 @@ await test('bas de fiche : case synchronisée avec celle du haut, placée avant 
   const bas = p.getByRole('checkbox', { name: 'Marquer cette fiche comme révisée' });
   ok(await p.evaluate(() => { const b = document.getElementById('suivi-revisee-bas'), n = document.querySelector('.pager'); return !!(b.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'case du bas avant le pager');
   const n0 = putsSince(journal.length);
-  await bas.check(); await p.waitForFunction(() => document.getElementById('suivi-revisee').checked);
+  const enregistre = () => p.waitForFunction(() => [...document.querySelectorAll('.suivi-fiche .suivi-msg')].every(m => m.textContent === 'Enregistré'), null, { timeout: 5000 });
+  await bas.check(); await p.waitForFunction(() => document.getElementById('suivi-revisee').checked); await enregistre();
   eq(serverState(), { N4: true }); ok(await caseDe(p).isChecked()); ok(await bas.isChecked());
-  await caseDe(p).uncheck(); await p.waitForFunction(() => !document.getElementById('suivi-revisee-bas').checked); eq(serverState(), {});
+  await caseDe(p).uncheck(); await p.waitForFunction(() => !document.getElementById('suivi-revisee-bas').checked); await enregistre(); eq(serverState(), {});
   await p.getByRole('link', { name: /Fiche suivante/ }).click(); await p.waitForURL(/n05\.html$/); await attendreActive(p); eq(serverState(), {});
   await p.close();
 });
@@ -410,7 +411,7 @@ const texteVolets = p => p.$$eval('.fiches > article.fiche', as => as.map(a => {
 
 await test('fiche sans annotation : aide et résumé en tête, notes en bas, HTML des volets identique au HTML publié', async () => {
   reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
-  ok(/sélectionnez un passage/.test(await p.locator('.annot-aide').innerText()));
+  ok(!/sélectionnez un passage/.test(await p.locator('.annot-tete').innerText()), 'plus de phrase d\'aide en tête de fiche');
   eq(await p.locator('.annot-resume').innerText(), 'Aucune annotation sur cette fiche pour l’instant.');
   eq(await p.locator('#annot-notes h2').innerText(), 'Mes notes sur cette fiche');
   ok(await p.evaluate(() => { const n = document.getElementById('annot-notes'), b = document.getElementById('suivi-revisee-bas'); return !!(n.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'notes avant la case du bas');
@@ -721,6 +722,16 @@ await test('téléphone Android émulé (412 px, tactile) : sélection, toucher 
   const p = await open(ctx, '/fiches/n04.html'); await attendreAnnot(p);
   await selectionner(p, 'proportionnalité inverse'); await attendreBarre(p);
   const bb = await barre(p).boundingBox(); ok(bb.x >= 0 && bb.x + bb.width <= 412 && bb.y + bb.height <= 860, 'barre dans l\'écran : ' + JSON.stringify(bb));
+  const hautBandeau = await p.evaluate(() => document.querySelector('.site-header').getBoundingClientRect().bottom);
+  ok(bb.y >= hautBandeau && bb.y + bb.height < 860 / 2, 'barre en haut de l\'écran, sous le bandeau (loin de la fenêtre système d\'Android) : ' + JSON.stringify(bb));
+  const recouvre = (sr, b) => sr.top < b.y + b.height && sr.bottom > b.y;
+  let sr = await p.evaluate(() => { const r = getSelection().getRangeAt(0).getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
+  ok(!recouvre(sr, bb), 'la barre ne cache pas le passage sélectionné');
+  // passage sélectionné tout en haut de l'écran : la barre se place en dessous
+  await p.evaluate(() => { const r = getSelection().getRangeAt(0).getBoundingClientRect(); window.scrollBy(0, r.top - document.querySelector('.site-header').getBoundingClientRect().bottom - 10); });
+  await p.waitForTimeout(300);
+  const bb2 = await barre(p).boundingBox(); sr = await p.evaluate(() => { const r = getSelection().getRangeAt(0).getBoundingClientRect(); return { top: r.top, bottom: r.bottom }; });
+  ok(!recouvre(sr, bb2) && bb2.y > sr.bottom, 'passage en haut : barre placée sous le passage ' + JSON.stringify({ sr, bb2 }));
   const tailles = await barre(p).locator('button').evaluateAll(bs => bs.map(b => b.getBoundingClientRect().height)); ok(tailles.every(h => h >= 36), 'boutons assez grands : ' + tailles);
   await barre(p).getByRole('button', { name: 'Surligner en jaune' }).tap(); await attendreMsg(p, /^Enregistré$/);
   await p.locator('mark.annot').first().tap(); const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor();

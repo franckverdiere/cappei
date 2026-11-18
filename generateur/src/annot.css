@@ -40,7 +40,6 @@ mark.annot-suite { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 /* En tête de fiche : aide, résumé, messages, annotations à rattacher */
 .annot-tete { margin: .35rem 0 0; font-size: .92rem; }
 .annot-tete p { margin: .2rem 0; }
-.annot-aide { color: var(--muted); }
 .annot-msg { font-size: .92rem; color: var(--muted); }
 .annot-msg:empty { display: none; }
 .annot-msg.annot-erreur { color: #9b1c1c; font-weight: 700; }
@@ -61,8 +60,8 @@ mark.annot-suite { border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .annot-pastille { display: inline-block; width: 1.1em; height: 1.1em; vertical-align: -.15em; margin-right: .35em; border: 1px solid #37474f; border-radius: .2em; }
 .annot-pastille.annot-c1 { background: var(--annot-1); } .annot-pastille.annot-c2 { background: var(--annot-2); } .annot-pastille.annot-c3 { background: var(--annot-3); }
 
-/* Barre d'annotation (bas de l'écran, pendant une sélection) */
-.annot-barre { position: fixed; left: 50%; bottom: max(.6rem, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .5rem; width: max-content; max-width: calc(100vw - 1rem); padding: .5rem .6rem; background: #fff; border: 2px solid #37474f; border-radius: .6rem; box-shadow: 0 4px 18px rgba(0,0,0,.28); font-size: .95rem; }
+/* Barre d'annotation (haut de l'écran, sous le bandeau, pendant une sélection) */
+.annot-barre { position: fixed; left: 50%; top: calc(var(--header-h) + .5rem); transform: translateX(-50%); z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .5rem; width: max-content; max-width: calc(100vw - 1rem); padding: .5rem .6rem; background: #fff; border: 2px solid #37474f; border-radius: .6rem; box-shadow: 0 4px 18px rgba(0,0,0,.28); font-size: .95rem; }
 .annot-barre[hidden] { display: none; }
 .annot-barre-t { font-weight: 700; margin-right: .1rem; }
 .annot-barre .annot-msg { flex-basis: 100%; text-align: center; }

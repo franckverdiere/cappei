@@ -367,7 +367,7 @@ const COVER_ANNOT = { cat: 'classeur', code: '', bannerLabel: 'CAPPEI  ·  ANNOT
 const AIDE_ANNOT = [
   { h: 'Comment faire', kind: 'neutre' },
   { ul: [
-    'Sur une fiche, **sélectionnez un passage** (sur tablette ou téléphone : appui long sur un mot, puis étirez la sélection) : une barre apparaît en bas de l’écran pour choisir une **couleur** (jaune, vert, rose) ou **commenter** le passage.',
+    'Sur une fiche, **sélectionnez un passage** (sur tablette ou téléphone : appui long sur un mot, puis étirez la sélection) : une barre apparaît en haut de l’écran pour choisir une **couleur** (jaune, vert, rose) ou **commenter** le passage.',
     '**Touchez ou cliquez un passage surligné** (ou sa bulle numérotée, présente quand il est commenté) pour **lire** son commentaire ; les boutons « Modifier » et « Supprimer » permettent ensuite de changer la couleur ou le commentaire, ou de supprimer le surlignage. À la souris, survoler un passage commenté affiche aussi le commentaire.',
     'Un surlignage tient dans **un seul paragraphe**, une seule puce ou une seule case de tableau.',
     'Les **notes sur une fiche entière** se trouvent en bas de chaque fiche (« Mes notes sur cette fiche »).',
