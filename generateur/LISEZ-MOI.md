@@ -52,4 +52,4 @@ Les fiches ont changé (atelier `atelier-fiches-2026-11-18.zip`) : fiche **C0**,
 
 Résultat local (FICHES_DIR pointant sur les fiches du 18 novembre) : 42 pages, 513 renvois, `check_site.js` : tous les contrôles passent ; Worker : 17 tests ; bout en bout : 32 tests (passés avant le déplacement du moyen mnémotechnique).
 
-État de la publication : le site (`docs/`) a été publié le 18 novembre 2026 au soir. **Le Worker en ligne doit recevoir la même modification** (Cloudflare → Workers & Pages → `cappei-revisions` → Edit code : ajouter `'C0', ` devant `'C1'` dans `CODES`, puis Deploy) : tant que ce n'est pas fait, cocher C0 affiche « Impossible d'enregistrer » et un import contenant C0 est refusé ; le reste du suivi fonctionne.
+État de la publication : le site (`docs/`) a été publié le 18 novembre 2026 au soir, et le Worker en ligne a reçu la même modification (`'C0'` ajouté à `CODES` dans l'éditeur Cloudflare, version déployée le 18 novembre vers 22 h 30). Vérifié en ligne : C0 cochée puis décochée (« Enregistré »), accueil « 10 fiches sur 37 révisées ». Seul écart avec `worker/worker.mjs` : les deux commentaires du Worker en ligne disent encore « 36 ».
