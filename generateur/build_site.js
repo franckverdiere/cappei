@@ -94,12 +94,12 @@ if (TAG_GREY !== '7A7A7A') COLOR_CHANGES.push(`repère de source [TAG] : #7A7A7A
 /* Texte identique à classeur.js sauf les passages marqués ADAPTÉ (papier / pliage / pages paysage). check_site.js liste ces écarts. */
 const cover1 = {
   cat: 'classeur', code: '', bannerLabel: 'CAPPEI  ·  CLASSEUR DE RÉVISION',
-  title: 'Fiches de révision CAPPEI', subtitle: 'Classeur général évolutif — état au 14 novembre 2026',
+  title: 'Fiches de révision CAPPEI', subtitle: 'Classeur général évolutif — état au 18 novembre 2026',
   blocks: [
     { h: 'Mode d’emploi', kind: 'neutre' },
     { ul: [
       // ADAPTÉ (original : « Chaque page paysage porte **deux fiches** à lire en portrait ; pliée en deux, elle donne un livret A5. »)
-      'Chaque page du site réunit les **deux fiches** d’une notion ou d’un thème (parfois trois), à lire l’une sous l’autre ; elles s’affichent côte à côte sur grand écran.',
+      'Chaque page du site réunit les **deux fiches** d’une notion ou d’un thème (parfois trois ou quatre), à lire l’une sous l’autre ; elles s’affichent côte à côte sur grand écran.',
       '**Une information n’a qu’une fiche d’attache** : ailleurs, un renvoi (« voir N4 ») y conduit.',
       'Chaque fiche de notion réunit la **définition**, les **distinctions**, les **auteurs** et la **mise en pratique**.',
       'Le contenu vient **exclusivement des documents de cours** ; les petits repères gris (CL, ECR, T25…) indiquent la source, détaillée en pied de page.',
@@ -119,6 +119,7 @@ const cover1 = {
       '**Fidélité** aux formulations des cours ; aucune source extérieure.',
       'Quand deux sources ne disent pas la même chose, la fiche **le signale** au lieu de trancher.',
       'Les moyens mnémotechniques sont **ajoutés** et étiquetés comme tels.',
+      'Les repères **FC** et **FL** renvoient aux deux fiches personnelles de la candidate (« Fiche concepts », « Fiche lois ») : ce qu’elles sont seules à dire porte ce repère.',
     ] },
   ],
 };
@@ -127,14 +128,14 @@ const cover2 = {
   blocks: [
     { table: { kind: 'neutre', widths: [36, 64], head: ['Partie', 'Fiches'], rows: [
       ['**1. Rapports de jury**', '**J1** Ce que le jury évalue · **J2** Épreuve 1, la séance · **J3** Épreuve 1, documents et entretien · **J4** Épreuve 2 · **J5** Épreuve 3 · **J6** Réussir les oraux'],
-      ['**2. Cadre réglementaire et institutionnel** (chronologique)', '**C1** Frise d’ensemble (France, international) · **C2** Avant 2005 · **C3** 2005 – 2012 · **C4** 2013 – 2018 · **C5** De 2019 à aujourd’hui, dont la Conférence nationale du handicap 2026 (3 fiches) · **C6** Aujourd’hui, comment ça marche · **C7** Protection de l’enfance'],
-      ['**3. Notions**', '**N1** École inclusive · **N2** Handicap et situation de handicap · **N3** Besoins éducatifs particuliers · **N4** Compensation, accessibilité, adaptation · **N5** Différenciation · **N6** Conception universelle et séance accessible · **N7** Enseignement explicite · **N8** Théories de l’apprentissage · **N9** Didactique · **N10** Observer et recueillir les besoins · **N11** Évaluer · **N12** Autonomie et métacognition · **N13** Co-enseignement et AESH · **N14** Familles et partenaires · **N15** Personne ressource, posture · **N16** Forme scolaire, exclusion, rapport au savoir'],
+      ['**2. Cadre réglementaire et institutionnel** (chronologique)', '**C0** Dates et textes à connaître · **C1** Frise d’ensemble (France, international) · **C2** Avant 2005 · **C3** 2005 – 2012 · **C4** 2013 – 2018 · **C5** De 2019 à aujourd’hui, dont la Conférence nationale du handicap 2026 (3 fiches) · **C6** Aujourd’hui, comment ça marche (4 fiches) · **C7** Protection de l’enfance'],
+      ['**3. Notions**', '**N1** École inclusive · **N2** Handicap et situation de handicap · **N3** Besoins éducatifs particuliers · **N4** Compensation, accessibilité, adaptation · **N5** Différenciation · **N6** Conception universelle et séance accessible · **N7** Enseignement explicite · **N8** Théories de l’apprentissage · **N9** Didactique · **N10** Observer et recueillir les besoins · **N11** Évaluer · **N12** Autonomie et métacognition · **N13** Co-enseignement et AESH · **N14** Familles et partenaires · **N15** Personne ressource, posture (4 fiches) · **N16** Forme scolaire, exclusion, rapport au savoir'],
       ['**4. Publics et disciplines**', '**P1** Troubles du neurodéveloppement · **P2** Troubles du comportement et contenance · **P3** Corps, émotions, adolescence · **P4** Nombre et résolution de problèmes · **P5** Oral, lecture-écriture · **P6** Numérique et supports accessibles · **P7** Parcours et orientation'],
       // ADAPTÉ (original : « **Auteurs** (2 pages) · **Sigles** (1 page), avec renvois aux fiches »)
       ['**Index**', '**Auteurs** · **Sigles**, avec renvois aux fiches'],
     ] } },
-    // ADAPTÉ (original : « … partie 2 (C1 à C7, 6 pages), … à raison de deux fiches par notion ou par thème, soit une page chacune. … »)
-    { box: { kind: 'neutre', title: 'Dans cette version', lines: ['Les quatre parties sont complètes : partie 1 (6 fiches), partie 2 (C1 à C7), partie 3 (N1 à N16) et partie 4 (P1 à P7), à raison de deux fiches par notion ou par thème. Les deux index terminent le classeur.'] } },
+    // ADAPTÉ (original : « … partie 2 (C0 à C7, 8 pages), partie 3 (N1 à N16, 17 pages) … à raison de deux fiches par page. … »)
+    { box: { kind: 'neutre', title: 'Dans cette version', lines: ['Les quatre parties sont complètes : partie 1 (6 fiches), partie 2 (C0 à C7), partie 3 (N1 à N16) et partie 4 (P1 à P7). Les deux index terminent le classeur.', 'Ajouts du 18 novembre 2026 : la fiche **C0** ; les volets 3/4 et 4/4 de **C6** et de **N15** ; des compléments tirés de la « Fiche concepts », repérés FC, dans N1 à N8, N11 à N13, P1 et P5.'] } },
   ],
 };
 
@@ -415,7 +416,7 @@ function build(opts) {
   for (const p of sequence) fs.writeFileSync(path.join(out, p.file), renderPage(p));
   return { pages: sequence.length + 2 + (active ? 1 : 0), refs: REFLOG.length, out, active };
 }
-/* Les 36 codes de pages de fiches (J, C, N, P), dans l'ordre du site : copiés dans config.js pour valider l'import côté navigateur. */
+/* Les 37 codes de pages de fiches (J, C, N, P), dans l'ordre du site : copiés dans config.js pour valider l'import côté navigateur. */
 const CODES = pages.map(p => p.code);
 const configJs = api => '/* Généré par build_site.js (config.json / API_URL). Adresse vide = suivi « fiche révisée » inactif. */\nwindow.CAPPEI_API = ' + JSON.stringify(api) + ';\nwindow.CAPPEI_CODES = ' + JSON.stringify(CODES) + ';\n';
 

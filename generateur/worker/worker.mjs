@@ -6,16 +6,16 @@
    Choix de stockage : la valeur ne contient QUE les codes à true, par ex. {"J1":true,"N4":true}.
    Raisons : valeur courte (moins d'octets écrits), un seul état possible par fiche (absent = non révisée),
    et rien à nettoyer si une liste de codes change. Les routes renvoient et acceptent toujours des booléens
-   explicites ; c'est le client (export) qui complète les 36 codes avec false.
+   explicites ; c'est le client (export) qui complète les 37 codes avec false.
 
    Limites de la formule gratuite de KV : 1 000 écritures par jour et 1 écriture par seconde sur une même clé.
    Le Worker n'écrit donc jamais si la valeur ne change pas. Remarque : KV est « à cohérence éventuelle » :
    une lecture faite depuis un autre site du réseau Cloudflare peut montrer l'ancienne valeur pendant environ une minute. */
 
-/* Les 36 pages de fiches (même liste que le site : voir test_worker.mjs, qui compare les deux). */
+/* Les 37 pages de fiches (même liste que le site : voir test_worker.mjs, qui compare les deux). */
 export const CODES = [
   'J1', 'J2', 'J3', 'J4', 'J5', 'J6',
-  'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
+  'C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7',
   'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12', 'N13', 'N14', 'N15', 'N16',
   'P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7',
 ];

@@ -172,8 +172,8 @@ section('(d) Nombre de pages');
   const nN = themes.filter(f => /\/n\d\d\.html$/.test(f)).length, nP = themes.filter(f => /\/p\d\d\.html$/.test(f)).length;
   const idx = ['index-auteurs.html', 'index-sigles.html'].filter(f => html[f]).length, home = html['index.html'] ? 1 : 0;
   console.log(`  J=${nJ} C=${nC} N=${nN} P=${nP} index=${idx} accueil=${home} total=${htmlFiles.length}`);
-  if (nJ !== 6 || nC !== 7 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 39 + 1 + (html['export.html'] ? 1 : 0)) fail('nombre de pages inattendu (attendu 6+7+16+7+2+1 = 39, + mode d’emploi, + export si le suivi est actif)');
-  const attendu = b => /^J/.test(b) ? 1 : ({ C2: 1, C3: 1, C4: 1, C5: 3 }[b] || 2);
+  if (nJ !== 6 || nC !== 8 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 40 + 1 + (html['export.html'] ? 1 : 0)) fail('nombre de pages inattendu (attendu 6+8+16+7+2+1 = 40, + mode d’emploi, + export si le suivi est actif)');
+  const attendu = b => /^J/.test(b) ? 1 : ({ C2: 1, C3: 1, C4: 1, C5: 3, C6: 4, N15: 4 }[b] || 2);
   for (const [b, fs_] of groups) if (fs_.length !== attendu(b)) fail(`${b} : ${fs_.length} volets (attendu ${attendu(b)})`);
   const att = ['.nojekyll', 'assets/style.css', 'assets/site.js'].filter(f => !fs.existsSync(path.join(DOCS, f)));
   if (att.length) fail('fichiers manquants : ' + att.join(', '));
@@ -287,7 +287,7 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     const extra = Object.keys(inactif).filter(k => !(k in ref));
     // Instantané pris juste avant l'ajout de la fonctionnalité : à titre d'information seulement (il diverge dès que les fiches ou anonymisation.json changent).
     console.log(`  instantané d'avant la fonctionnalité (ref-docs-hashes.json, ${Object.keys(ref).length} fichiers) : ` + (diff.length ? `${diff.length} fichier(s) diffèrent (${diff.slice(0, 4).join(', ')}) : normal si les fiches ou l'anonymisation ont changé depuis ; non bloquant` : 'tous identiques octet pour octet') + `${extra.length ? ' ; fichiers en plus : ' + extra.join(', ') : ''}`);
-    if (extra.some(k => k !== 'assets/config.js' && k !== 'mode-emploi.html')) fail('suivi inactif : fichiers en plus de config.js et mode-emploi.html : ' + extra.join(', '));
+    if (extra.some(k => k !== 'assets/config.js' && k !== 'mode-emploi.html' && k !== 'fiches/c00.html' /* fiche C0 ajoutée le 18 novembre 2026 */)) fail('suivi inactif : fichiers en plus de config.js et mode-emploi.html : ' + extra.join(', '));
   }
   const strip = h => h.replace(/\?v=[0-9a-f]{8}"/g, '"').replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
   if (/assets\/(?:config|suivi)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
@@ -320,8 +320,8 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
   const wCodes = wm ? [...wm[1].matchAll(/'([A-Z]\d+)'/g)].map(x => x[1]) : [];
   const siteCodes = [...groups.keys()];
   const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-  if (cfgCodes.length !== 36 || !same(cfgCodes, siteCodes)) fail('config.js : CAPPEI_CODES différent des pages du site');
-  if (wCodes.length !== 36 || !same(wCodes, siteCodes)) fail('worker.mjs : CODES différent des pages du site');
+  if (cfgCodes.length !== 37 || !same(cfgCodes, siteCodes)) fail('config.js : CAPPEI_CODES différent des pages du site');
+  if (wCodes.length !== 37 || !same(wCodes, siteCodes)) fail('worker.mjs : CODES différent des pages du site');
   console.log(`  codes : config.js (${cfgCodes.length}) = pages du site (${siteCodes.length}) = Worker (${wCodes.length})`);
 
   // (d) contrastes des couleurs ajoutées (AA, 4,5:1) : texte sur blanc, bouton rouge, bandeau « classeur »

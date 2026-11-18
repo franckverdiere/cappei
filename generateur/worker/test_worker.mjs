@@ -23,8 +23,8 @@ const call = async (env, method, p, body, headers) => {
 const newEnv = (initial, extra) => ({ REVISIONS: fakeKV(initial), ...(extra || {}) });
 
 test('la liste des codes du Worker = les codes des pages générées par le site', () => {
-  assert.equal(CODES.length, 36);
-  assert.equal(new Set(CODES).size, 36);
+  assert.equal(CODES.length, 37);
+  assert.equal(new Set(CODES).size, 37);
   const require = createRequire(import.meta.url);
   const site = require('../build_site.js');
   const fromSite = site.pages.map(p => p.code);
@@ -119,7 +119,7 @@ test('import valide : remplace tout, ne stocke que les true', async () => {
   assert.equal(env.REVISIONS.store.get('revisees'), '{"C2":true,"P7":true}');
   const tous = Object.fromEntries(CODES.map(c => [c, true]));
   const r2 = await call(env, 'PUT', '/api/revisions', { revisees: tous });
-  assert.equal(Object.keys(r2.json.revisees).length, 36);
+  assert.equal(Object.keys(r2.json.revisees).length, 37);
 });
 
 test('import invalide : 400, état inchangé', async () => {
