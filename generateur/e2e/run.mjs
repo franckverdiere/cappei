@@ -210,7 +210,7 @@ await test('export : fichier revisions-cappei-AAAA-MM-JJ.json valide, 37 codes, 
   const f = await dl(p);
   ok(/^revisions-cappei-\d{4}-\d{2}-\d{2}\.json$/.test(f.name), f.name);
   const j = JSON.parse(f.data);
-  eq(Object.keys(j).sort(), ['exporte_le', 'revisees', 'version']); eq(j.version, 1); ok(!isNaN(Date.parse(j.exporte_le)) && /T.*Z$/.test(j.exporte_le), 'ISO');
+  eq(Object.keys(j).sort(), ['annotations', 'exporte_le', 'revisees', 'version']); eq(j.version, 2); eq(j.annotations, {}); ok(!isNaN(Date.parse(j.exporte_le)) && /T.*Z$/.test(j.exporte_le), 'ISO');
   eq(Object.keys(j.revisees), CODES); ok(Object.values(j.revisees).every(v => typeof v === 'boolean'));
   eq(Object.keys(j.revisees).filter(k => j.revisees[k]).sort(), ['C2', 'J1', 'N4', 'P7']);
   await p.close();
@@ -242,12 +242,12 @@ await test('import invalide (8 cas) : refusé avec message clair, aucun envoi, �
   const cas = [
     ['pas json', 'ceci n\'est pas du JSON', /pas un JSON valide/],
     ['tableau', '[1,2,3]', /objet JSON attendu/],
-    ['version', JSON.stringify({ version: 2, revisees: {} }), /Version de sauvegarde non reconnue/],
+    ['version', JSON.stringify({ version: 3, revisees: {} }), /Version de sauvegarde non reconnue/],
     ['sans version', JSON.stringify({ revisees: {} }), /Version de sauvegarde non reconnue/],
     ['code inconnu', JSON.stringify({ version: 1, revisees: { Z9: true } }), /Code de fiche inconnu : Z9/],
     ['non booléen', JSON.stringify({ version: 1, revisees: { J1: 'oui' } }), /doit être true ou false/],
     ['revisees absent', JSON.stringify({ version: 1 }), /revisees/],
-    ['trop gros', JSON.stringify({ version: 1, revisees: {}, pad: 'x'.repeat(20000) }), /volumineux/],
+    ['trop gros', JSON.stringify({ version: 1, revisees: {}, pad: 'x'.repeat(2200000) }), /volumineux/],
   ];
   const n = journal.length;
   for (const [nom, contenu, motif] of cas) {
@@ -296,11 +296,11 @@ await test('accueil : plus de « Sauvegarde » ni de mode d\'emploi, deux liens 
   await p.close();
 });
 await test('menu : « Mode d\'emploi » et « Export » sous Accueil, page courante marquée, sur toutes les pages', async () => {
-  for (const u of ['/index.html', '/fiches/n04.html', '/index-sigles.html', '/mode-emploi.html', '/export.html']) {
+  for (const u of ['/index.html', '/fiches/n04.html', '/index-sigles.html', '/mode-emploi.html', '/export.html', '/annotations.html']) {
     const p = await open(ctxA, u);
-    eq(await p.$$eval('#menu > a', es => es.map(e => e.textContent)), ['Accueil', 'Mode d’emploi', 'Export'], u);
+    eq(await p.$$eval('#menu > a', es => es.map(e => e.textContent)), ['Accueil', 'Mode d’emploi', 'Mes annotations', 'Export'], u);
     const cur = await p.$$eval('#menu > a[aria-current="page"]', es => es.map(e => e.textContent));
-    eq(cur, u === '/mode-emploi.html' ? ['Mode d’emploi'] : u === '/export.html' ? ['Export'] : u === '/index.html' ? ['Accueil'] : [], u);
+    eq(cur, u === '/mode-emploi.html' ? ['Mode d’emploi'] : u === '/export.html' ? ['Export'] : u === '/annotations.html' ? ['Mes annotations'] : u === '/index.html' ? ['Accueil'] : [], u);
     await p.close();
   }
 });
@@ -376,12 +376,395 @@ await test('impression : les éléments du suivi sont masqués', async () => {
   const q = await open(ctxA, '/fiches/n04.html'); await attendreActive(q); await q.emulateMedia({ media: 'print' }); eq(await q.$eval('.suivi-fiche', e => getComputedStyle(e).display), 'none'); await q.close();
 });
 
+/* ======================================================================== Annotations */
+console.log('\nAnnotations : surlignages, commentaires, notes');
+const kvAnn = (code) => { const v = kv.store.get('annotations:' + code); return v ? JSON.parse(v) : null; };
+const annList = (code) => (kvAnn(code) || { annotations: [] }).annotations;
+const D0 = '2026-11-18T21:00:00.000Z';
+const passageKV = (o) => ({ id: 'abcdefgh1234', type: 'passage', volet: 'n04-1', bloc: 0, debut: 0, texte: 'proportionnalité inverse', avant: 'La règle de ', apres: '', couleur: 1, commentaire: '', cree: D0, modifie: D0, ...(o || {}) });
+const noteKV = (o) => ({ id: 'note00000001', type: 'note', texte: 'Ma note de test.', cree: D0, modifie: D0, ...(o || {}) });
+const setAnn = (code, list, rev) => kv.store.set('annotations:' + code, JSON.stringify({ rev: rev === undefined ? 1 : rev, annotations: list }));
+/* Sélectionne dans les fiches le premier passage égal à `texte` (ou de `texte` jusqu'à `fin`, dans un autre bloc). */
+const selectionner = (p, texte, fin) => p.evaluate(([texte, fin]) => {
+  const BL = 'p, li, h2, h3';
+  const blocs = [...document.querySelectorAll('.fiches > article.fiche')].flatMap(a => [...a.querySelectorAll(BL)].filter(e => !e.querySelector(BL)));
+  const nodesOf = b => { const out = []; const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (!n.parentElement.closest('[data-annot-ui]')) out.push(n); } return out; };
+  const txt = b => nodesOf(b).map(n => n.nodeValue).join('');
+  const pos = (nodes, k) => { let acc = 0; for (const n of nodes) { if (k <= acc + n.nodeValue.length) return [n, k - acc]; acc += n.nodeValue.length; } const l = nodes[nodes.length - 1]; return [l, l.nodeValue.length]; };
+  const b = blocs.find(x => txt(x).includes(texte)); if (!b) return false;
+  const i = txt(b).indexOf(texte);
+  let endNodes = nodesOf(b), j = i + texte.length;
+  if (fin) { const b2 = blocs.find(x => x !== b && txt(x).includes(fin)); endNodes = nodesOf(b2); j = txt(b2).indexOf(fin) + fin.length; }
+  const [sn, so] = pos(nodesOf(b), i), [en, eo] = pos(endNodes, j);
+  getSelection().setBaseAndExtent(sn, so, en, eo);
+  return true;
+}, [texte, fin || null]);
+const attendreAnnot = (p) => p.waitForFunction(() => { const r = document.querySelector('.annot-resume'); return r && r.textContent && !/Chargement/.test(r.textContent); }, null, { timeout: 5000 });
+const barre = p => p.locator('.annot-barre');
+const attendreBarre = p => p.locator('.annot-barre:not([hidden])').waitFor({ timeout: 5000 });
+const msgAnnot = p => p.locator('.annot-tete .annot-msg');
+const attendreMsg = (p, re) => p.waitForFunction(r => new RegExp(r).test(document.querySelector('.annot-tete .annot-msg').textContent), re.source, { timeout: 8000 });
+const html0 = {};   // HTML d'origine des volets (sans annotation), pour vérifier que le texte des fiches n'est jamais modifié
+const htmlVolets = p => p.$$eval('.fiches > article.fiche', as => as.map(a => a.innerHTML));
+const texteVolets = p => p.$$eval('.fiches > article.fiche', as => as.map(a => { const c = a.cloneNode(true); c.querySelectorAll('[data-annot-ui]').forEach(x => x.remove()); return c.textContent; }));
+
+await test('fiche sans annotation : aide et résumé en tête, notes en bas, HTML des volets identique au HTML publié', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  ok(/sélectionnez un passage/.test(await p.locator('.annot-aide').innerText()));
+  eq(await p.locator('.annot-resume').innerText(), 'Aucune annotation sur cette fiche pour l’instant.');
+  eq(await p.locator('#annot-notes h2').innerText(), 'Mes notes sur cette fiche');
+  ok(await p.evaluate(() => { const n = document.getElementById('annot-notes'), b = document.getElementById('suivi-revisee-bas'); return !!(n.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); }), 'notes avant la case du bas');
+  html0.n04 = await htmlVolets(p);
+  const brut = fs.readFileSync(path.join(SITE_ON, 'fiches/n04.html'), 'utf8');
+  const statique = [...brut.matchAll(/<article class="fiche"[^>]*>([\s\S]*?)<\/article>/g)].map(m => m[1]);
+  eq(html0.n04.length, statique.length); html0.n04.forEach((h, i) => eq(h, statique[i], 'volet ' + i + ' modifié par les scripts'));
+  ok(await barre(p).isHidden(), 'barre cachée sans sélection');
+  await p.close();
+});
+
+await test('sélection -> barre (3 couleurs + Commenter) ; surligner en vert : enregistré, persistant, visible sur un autre appareil', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  ok(await selectionner(p, 'proportionnalité inverse')); await attendreBarre(p);
+  eq(await barre(p).getAttribute('role'), 'toolbar');
+  eq(await barre(p).locator('button[data-action]').allInnerTexts(), ['Jaune', 'Vert', 'Rose', 'Commenter…']);
+  await barre(p).getByRole('button', { name: 'Surligner en vert' }).click();
+  await attendreMsg(p, /^Enregistré$/);
+  const l = annList('N4'); eq(l.length, 1);
+  eq([l[0].type, l[0].volet, l[0].texte, l[0].couleur, l[0].commentaire], ['passage', 'n04-1', 'proportionnalité inverse', 2, '']);
+  ok(l[0].avant.endsWith('La règle de ') && /^[a-z0-9]{12}$/.test(l[0].id), JSON.stringify(l[0]));
+  eq(await p.locator('mark.annot').count(), 1); eq(await p.locator('mark.annot').innerText(), 'proportionnalité inverse'); ok(await p.locator('mark.annot.annot-c2').count() === 1);
+  ok(await barre(p).isHidden(), 'barre cachée après enregistrement'); eq(await p.evaluate(() => String(getSelection())), '');
+  ok(/1 surlignage/.test(await p.locator('.annot-resume').innerText()));
+  eq(await texteVolets(p), await (async () => { const c = await newCtx(); const q = await open(c, '/fiches/n05.html'); await q.close(); await c.close(); return await texteVolets(p); })());   // texte inchangé (sanity)
+  await p.reload(); await attendreAnnot(p); eq(await p.locator('mark.annot.annot-c2').innerText(), 'proportionnalité inverse');
+  const ctxB = await newCtx(); const q = await open(ctxB, '/fiches/n04.html'); await attendreAnnot(q);
+  eq(await q.locator('mark.annot').count(), 1, 'autre appareil'); await ctxB.close();
+  await p.close();
+});
+
+await test('passage à cheval sur du gras : plusieurs segments, un seul surlignage ; le texte des volets est inchangé', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  const t0 = await texteVolets(p);
+  ok(await selectionner(p, 'compensation individuelle (Benoit')); await attendreBarre(p);
+  await barre(p).getByRole('button', { name: 'Surligner en jaune' }).click(); await attendreMsg(p, /^Enregistré$/);
+  const marks = p.locator('mark.annot'); ok(await marks.count() >= 2, 'segments : ' + await marks.count());
+  eq((await marks.allInnerTexts()).join(''), 'compensation individuelle (Benoit');
+  eq(new Set(await marks.evaluateAll(ms => ms.map(m => m.getAttribute('data-annot')))).size, 1);
+  ok(await p.locator('strong mark.annot').count() === 1, 'segment dans le gras');
+  eq(await texteVolets(p), t0, 'texte des volets');
+  await p.close();
+});
+
+await test('commenter : dialogue (couleur, compteur), bulle numérotée, info-bulle au survol, clic sur la bulle -> dialogue', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  await selectionner(p, 'proportionnalité inverse'); await attendreBarre(p);
+  await barre(p).getByRole('button', { name: 'Commenter…' }).click();
+  const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor();
+  ok(await dlg.evaluate(d => d.open && d.matches(':modal')), 'dialogue modal'); eq(await dlg.locator('h2').innerText(), 'Commenter le passage');
+  eq(await dlg.locator('blockquote').innerText(), 'proportionnalité inverse');
+  ok(await p.evaluate(() => document.activeElement.id === 'annot-com'), 'focus dans le commentaire');
+  await dlg.getByLabel('Rose').check(); ok(await dlg.locator('blockquote.annot-c3').count() === 1, 'aperçu de la couleur');
+  await dlg.getByLabel('Commentaire', { exact: true }).fill('Lien avec N6 :\nconception universelle.');
+  ok(/38 \/ 2000/.test(await dlg.locator('.annot-compteur').innerText()), await dlg.locator('.annot-compteur').innerText());
+  await dlg.getByRole('button', { name: 'Enregistrer' }).click();
+  await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  const a = annList('N4')[0]; eq([a.couleur, a.commentaire], [3, 'Lien avec N6 :\nconception universelle.']);
+  const bulle = p.locator('.annot-bulle'); eq(await bulle.count(), 1);
+  ok((await bulle.getAttribute('aria-label')).startsWith('Commentaire 1 : Lien avec N6'), await bulle.getAttribute('aria-label'));
+  ok(/dont 1 commenté/.test(await p.locator('.annot-resume').innerText()));
+  await bulle.hover(); await p.locator('.annot-infobulle:not([hidden])').waitFor({ timeout: 3000 });
+  eq(await p.locator('.annot-infobulle').innerText(), 'Lien avec N6 :\nconception universelle.');
+  await p.mouse.move(5, 5); await p.locator('.annot-infobulle').waitFor({ state: 'hidden', timeout: 3000 });
+  await p.locator('mark.annot').first().hover(); await p.locator('.annot-infobulle:not([hidden])').waitFor({ timeout: 3000 });   // survol du passage lui-même
+  eq(await bulle.innerText(), '1', 'numéro visible dans la bulle');
+  const bx = await bulle.boundingBox(); ok(bx.height >= 15 && bx.width >= 20, 'bulle assez grande : ' + JSON.stringify(bx));
+  ok(await p.evaluate(() => { const b = document.querySelector('.annot-bulle'), r = b.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top - 6) === b && document.elementFromPoint(r.left + r.width / 2, r.bottom + 6) === b; }), 'zone de toucher plus grande que la pastille');
+  eq((await p.locator('mark.annot.annot-commente').allInnerTexts()).join(''), 'proportionnalité inverse', 'passage commenté souligné');
+  ok(await p.evaluate(() => { const b = document.querySelector('.annot-bulle'); return b.parentElement.classList.contains('annot-colle') && getComputedStyle(b.parentElement).whiteSpace === 'nowrap' && b.previousElementSibling.textContent === 'inverse'; }), 'bulle collée au dernier mot');
+  await bulle.click(); await dlg.waitFor();
+  // lecture d'abord : pas de champ éditable
+  eq(await dlg.locator('h2').innerText(), 'Passage surligné'); eq(await dlg.locator('textarea, input').count(), 0, 'aucun champ en lecture');
+  eq(await dlg.locator('.annot-lecture').innerText(), 'Lien avec N6 :\nconception universelle.'); eq(await dlg.locator('.annot-lecture-couleur').innerText(), 'Couleur : rose');
+  eq(await dlg.locator('.annot-vue > .annot-actions button').allInnerTexts(), ['Modifier', 'Supprimer', 'Fermer']);
+  // modifier : action volontaire
+  await dlg.getByRole('button', { name: 'Modifier' }).click();
+  eq(await dlg.locator('h2').innerText(), 'Modifier le passage surligné'); eq(await dlg.getByLabel('Commentaire', { exact: true }).inputValue(), 'Lien avec N6 :\nconception universelle.'); ok(await dlg.getByLabel('Rose').isChecked());
+  await dlg.getByRole('button', { name: 'Annuler' }).click(); eq(await dlg.locator('h2').innerText(), 'Passage surligné', 'Annuler revient à la lecture');
+  await dlg.getByRole('button', { name: 'Fermer' }).click(); ok(!(await dlg.evaluate(d => d.open)));
+  await p.close();
+});
+
+await test('modifier (couleur, commentaire) puis supprimer avec confirmation : la fiche revient exactement à son HTML d\'origine', async () => {
+  reset(); setAnn('N4', [passageKV({ bloc: 99, debut: 0 })], 3);   // bloc faux : retrouvé par le texte et le contexte
+  const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  eq(await p.locator('mark.annot').innerText(), 'proportionnalité inverse');
+  await p.locator('mark.annot').first().click();
+  const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor();
+  ok(/Aucun commentaire/.test(await dlg.innerText())); eq(annList('N4')[0].commentaire, '');
+  await dlg.getByRole('button', { name: 'Commenter ou changer la couleur' }).click();
+  await dlg.getByLabel('Vert').check(); await dlg.getByLabel('Commentaire', { exact: true }).fill('Modifié');
+  await dlg.getByRole('button', { name: 'Enregistrer' }).click();
+  await p.waitForFunction(() => { const d = document.querySelector('dialog.annot-dialogue'); return d.open && d.querySelector('.annot-lecture') && /Enregistré/.test(d.textContent); });
+  eq(await dlg.locator('.annot-lecture').innerText(), 'Modifié', 'retour à la lecture après enregistrement'); eq(await dlg.locator('.annot-lecture-couleur').innerText(), 'Couleur : vert');
+  let a = annList('N4')[0]; eq([a.couleur, a.commentaire, kvAnn('N4').rev], [2, 'Modifié', 4]); ok(a.modifie > D0);
+  await dlg.getByRole('button', { name: 'Fermer' }).click();
+  await p.locator('mark.annot').first().click(); await dlg.waitFor();
+  await dlg.locator('.annot-vue > .annot-actions').getByRole('button', { name: 'Supprimer', exact: true }).click();
+  ok(/Supprimer ce surlignage et son commentaire/.test(await dlg.locator('.annot-confirm').innerText()));
+  eq(annList('N4').length, 1, 'rien supprimé avant confirmation');
+  await dlg.locator('.annot-confirm').getByRole('button', { name: 'Supprimer' }).click();
+  await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  eq(annList('N4'), []); eq(await p.locator('mark.annot, .annot-bulle').count(), 0);
+  eq(await htmlVolets(p), html0.n04, 'HTML des volets après suppression');
+  await p.close();
+});
+
+await test('sélections refusées : deux paragraphes, chevauchement d\'un surlignage, hors des fiches -> message ou rien, aucun envoi', async () => {
+  reset(); setAnn('N4', [passageKV()], 1);
+  const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  const n = journal.length;
+  await selectionner(p, 'proportionnalité', 'Plus un environnement'); await attendreBarre(p);
+  ok(/un seul paragraphe/.test(await barre(p).innerText()), await barre(p).innerText()); eq(await barre(p).locator('button[data-action]').count(), 0);
+  await selectionner(p, 'règle de proportionnalité'); await p.waitForFunction(() => /touche un surlignage existant/.test(document.querySelector('.annot-barre').textContent), null, { timeout: 3000 });
+  await p.evaluate(() => { const h = document.querySelector('.page-head h1'); getSelection().selectAllChildren(h); });
+  await p.waitForTimeout(900); ok(await barre(p).isHidden(), 'sélection du titre de page : pas de barre');
+  await selectionner(p, 'Un même outil, deux logiques'); await attendreBarre(p);
+  await barre(p).getByRole('button', { name: 'Fermer la barre' }).click(); ok(await barre(p).isHidden()); eq(await p.evaluate(() => String(getSelection())), '');
+  eq(journal.slice(n).filter(j => j.method !== 'GET' && j.method !== 'OPTIONS').length, 0, 'aucune écriture');
+  await p.close();
+});
+
+await test('triple clic (paragraphe entier) : la fin au début du bloc suivant est acceptée', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  const r = await p.evaluate(() => { const b = [...document.querySelectorAll('.box-title')].find(x => /proportionnalité/.test(x.textContent)); const next = b.nextElementSibling; getSelection().setBaseAndExtent(b.firstChild, 0, next, 0); return b.textContent.trim(); });
+  await attendreBarre(p); await barre(p).getByRole('button', { name: 'Surligner en rose' }).click(); await attendreMsg(p, /^Enregistré$/);
+  eq(annList('N4')[0].texte, r);
+  await p.close();
+});
+
+await test('notes de fiche : ajouter, modifier, supprimer ; résumé ; lien « Voir les notes »', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  await p.getByRole('button', { name: 'Ajouter une note' }).click();
+  const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor(); eq(await dlg.locator('h2').innerText(), 'Nouvelle note — N4');
+  await dlg.getByRole('button', { name: 'Enregistrer' }).click(); ok(/La note est vide/.test(await dlg.locator('.annot-msg').innerText()));
+  await dlg.getByLabel('Texte de la note').fill('Première ligne\nDeuxième ligne'); await dlg.getByRole('button', { name: 'Enregistrer' }).click();
+  await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  eq(annList('N4').map(a => [a.type, a.texte]), [['note', 'Première ligne\nDeuxième ligne']]);
+  eq(await p.locator('.annot-notes-liste .annot-texte').innerText(), 'Première ligne\nDeuxième ligne');
+  ok(/Écrite le \d\d\/\d\d\/\d{4}/.test(await p.locator('.annot-notes-liste .annot-date').innerText()));
+  ok(/1 note/.test(await p.locator('.annot-resume').innerText())); eq(await p.locator('.annot-resume a').getAttribute('href'), '#annot-notes');
+  await p.locator('.annot-notes-liste').getByRole('button', { name: 'Modifier' }).click(); await dlg.waitFor();
+  await dlg.getByLabel('Texte de la note').fill('Modifiée'); await dlg.getByRole('button', { name: 'Enregistrer' }).click();
+  await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  eq(annList('N4')[0].texte, 'Modifiée'); ok(/Modifiée le/.test(await p.locator('.annot-notes-liste .annot-date').innerText()));
+  await p.locator('.annot-notes-liste').getByRole('button', { name: 'Modifier' }).click(); await dlg.waitFor();
+  await dlg.getByRole('button', { name: 'Supprimer la note' }).click(); await dlg.locator('.annot-confirm').getByRole('button', { name: 'Supprimer' }).click();
+  await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  eq(annList('N4'), []); ok(await p.locator('.annot-vide').isVisible());
+  await p.close();
+});
+
+await test('textes saisis affichés comme du texte : aucune balise injectée (commentaire, note, passage)', async () => {
+  reset();
+  const piege = '<img src=x onerror="window.__pirate=1"><script>window.__pirate=2</script><b>gras</b>';
+  setAnn('N4', [passageKV({ commentaire: piege }), noteKV({ texte: piege })], 1);
+  const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  eq(await p.evaluate(() => window.__pirate), undefined);
+  eq(await p.locator('main img, main script, main b, .annot-notes b').count(), 0);
+  eq(await p.locator('.annot-notes-liste .annot-texte').innerText(), piege);
+  await p.locator('.annot-bulle').hover(); await p.locator('.annot-infobulle:not([hidden])').waitFor(); eq(await p.locator('.annot-infobulle').innerText(), piege);
+  ok((await p.locator('.annot-bulle').getAttribute('aria-label')).includes('<img'));
+  const q = await open(ctxA, '/annotations.html'); await q.locator('.annot-items').first().waitFor({ timeout: 5000 });
+  eq(await q.evaluate(() => window.__pirate), undefined); eq(await q.locator('main img, main script, main b').count(), 0);
+  await p.close(); await q.close();
+});
+
+await test('annotation à rattacher (passage disparu de la fiche) : encadré, transformer en note, supprimer', async () => {
+  reset(); setAnn('N4', [passageKV({ id: 'orph00000001', texte: 'texte qui n’existe plus nulle part', couleur: 3, commentaire: 'Mon commentaire' }), passageKV({ id: 'orph00000002', texte: 'autre passage disparu' })], 2);
+  const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  const box = p.locator('.annot-orphelines'); ok(await box.isVisible()); ok(/Annotations à rattacher \(2\)/.test(await box.innerText()));
+  ok(/2 annotations à rattacher/.test(await p.locator('.annot-resume').innerText())); eq(await p.locator('mark.annot').count(), 0);
+  await box.locator('li').first().getByRole('button', { name: 'Transformer en note' }).click();
+  await p.waitForFunction(() => document.querySelectorAll('.annot-orphelines li').length === 1, null, { timeout: 8000 });
+  const l = annList('N4'); eq(l.map(a => a.type).sort(), ['note', 'passage']);
+  eq(l.find(a => a.type === 'note').texte, '« texte qui n’existe plus nulle part »\nMon commentaire');
+  await box.getByRole('button', { name: 'Supprimer' }).click();
+  const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor(); eq(await dlg.locator('h2').innerText(), 'Annotation à rattacher');
+  await dlg.locator('.annot-vue > .annot-actions').getByRole('button', { name: 'Supprimer', exact: true }).click(); await dlg.locator('.annot-confirm').getByRole('button', { name: 'Supprimer' }).click();
+  await p.waitForFunction(() => document.querySelector('.annot-orphelines').hidden, null, { timeout: 8000 });
+  eq(annList('N4').map(a => a.type), ['note']);
+  await p.close();
+});
+
+await test('échecs : réseau coupé à l\'enregistrement (dialogue gardé, texte conservé, réessai), lecture périmée (409), service indisponible au chargement', async () => {
+  reset(); const p = await open(ctxA, '/fiches/n04.html'); await attendreAnnot(p);
+  await p.getByRole('button', { name: 'Ajouter une note' }).click(); const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor();
+  await dlg.getByLabel('Texte de la note').fill('Ne pas perdre ce texte'); mode.fail = 'down';
+  await dlg.getByRole('button', { name: 'Enregistrer' }).click();
+  await p.waitForFunction(() => /injoignable/.test(document.querySelector('dialog.annot-dialogue .annot-msg').textContent), null, { timeout: 15000 });
+  ok(await dlg.evaluate(d => d.open), 'dialogue toujours ouvert'); eq(await dlg.getByLabel('Texte de la note').inputValue(), 'Ne pas perdre ce texte'); ok(await dlg.getByRole('button', { name: 'Enregistrer' }).isEnabled());
+  mode.fail = null; await dlg.getByRole('button', { name: 'Enregistrer' }).click(); await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  eq(annList('N4').length, 1);
+  // lecture périmée : le service relit une version plus ancienne que celle que la page connaît
+  kv.store.set('annotations:N4', JSON.stringify({ rev: 0, annotations: [] }));
+  await selectionner(p, 'proportionnalité inverse'); await attendreBarre(p); await barre(p).getByRole('button', { name: 'Surligner en jaune' }).click();
+  await attendreMsg(p, /pas encore pris en compte/); ok(await msgAnnot(p).evaluate(e => e.classList.contains('annot-erreur')));
+  eq(kvAnn('N4').annotations, [], 'rien écrit sur une lecture périmée');
+  await p.close();
+  reset(); mode.fail = '500'; const q = await open(ctxA, '/fiches/n04.html');
+  await q.waitForFunction(() => /Annotations indisponibles/.test(document.querySelector('.annot-tete .annot-msg').textContent), null, { timeout: 8000 });
+  ok(await q.getByRole('button', { name: 'Ajouter une note' }).isDisabled()); ok(await q.locator('.annot-tete').getByRole('button', { name: 'Réessayer' }).isVisible());
+  await selectionner(q, 'proportionnalité inverse'); await q.waitForTimeout(500); ok(await barre(q).isHidden(), 'pas de barre si le service est indisponible');
+  mode.fail = null; setAnn('N4', [passageKV()]); await q.locator('.annot-tete').getByRole('button', { name: 'Réessayer' }).click();
+  await q.locator('mark.annot').first().waitFor({ timeout: 5000 }); ok(await q.getByRole('button', { name: 'Ajouter une note' }).isEnabled());
+  await q.close();
+});
+
+await test('autre appareil : en revenant sur l\'onglet (après 30 s), la page relit et affiche les nouvelles annotations', async () => {
+  reset(); const p = await ctxA.newPage(); await p.clock.install(); await p.goto(SITE + '/fiches/n04.html'); await attendreAnnot(p);
+  eq(await p.locator('mark.annot').count(), 0);
+  setAnn('N4', [passageKV()], 1);
+  await p.clock.fastForward(31000); await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await p.locator('mark.annot').first().waitFor({ timeout: 5000 });
+  await p.close();
+});
+
+await test('clavier : Tab atteint le surlignage, Entrée ouvre le dialogue, Échap le ferme et rend le focus', async () => {
+  reset(); setAnn('N4', [passageKV()], 1); const p = await open(ctxA, '/fiches/n04.html'); await p.locator('mark.annot').first().waitFor();
+  await p.locator('mark.annot').focus(); await p.keyboard.press('Enter');
+  const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor(); ok(await dlg.evaluate(d => d.open));
+  await p.keyboard.press('Escape'); await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  ok(await p.evaluate(() => document.activeElement && document.activeElement.matches('mark.annot')), 'focus rendu au surlignage');
+  let atteint = false; await p.locator('.page-head h1').click();
+  for (let i = 0; i < 60 && !atteint; i++) { await p.keyboard.press('Tab'); atteint = await p.evaluate(() => document.activeElement.matches('mark.annot')); }
+  ok(atteint, 'surlignage atteint au clavier');
+  await p.close();
+});
+
+await test('lien profond #annot-<id> : la fiche défile jusqu\'au passage et le met en évidence', async () => {
+  reset(); setAnn('N4', [passageKV({ id: 'cible0000001', texte: 'Ce qui fait la différence', avant: '', bloc: 0 })], 1);
+  const p = await open(ctxA, '/fiches/n04.html#annot-cible0000001'); await p.locator('mark.annot').first().waitFor();
+  await p.waitForFunction(() => document.querySelector('mark.annot').classList.contains('annot-flash'), null, { timeout: 3000 });
+  const r = await p.locator('mark.annot').boundingBox(); const vh = await p.evaluate(() => innerHeight); ok(r.y > 0 && r.y < vh, 'passage visible : y=' + r.y);
+  await p.close();
+});
+
+await test('page « Mes annotations » : regroupement par partie et fiche, filtres, liens vers le passage', async () => {
+  reset();
+  setAnn('N4', [passageKV({ commentaire: 'à revoir' }), passageKV({ id: 'vert00000001', texte: 'Un même outil', couleur: 2 }), noteKV()], 3);
+  setAnn('J2', [passageKV({ id: 'jury00000001', volet: 'j02-1', texte: 'séance', couleur: 3 })], 1);
+  const p = await open(ctxA, '/annotations.html'); await p.locator('.annot-items').first().waitFor({ timeout: 5000 });
+  eq(await p.locator('.annot-resume-liste').innerText(), '3 surlignages (dont 1 commenté) et 1 note, sur 2 fiches.');
+  ok(await p.evaluate(() => { const l = document.getElementById('annot-liste'), h = [...document.querySelectorAll('h3.rub')].find(x => /Comment faire/.test(x.textContent)); return !!h && !!(l.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING); }), '« Comment faire » après la liste');
+  eq(await p.locator('h2.annot-partie').allInnerTexts(), ['Rapports de jury', 'Notions']);
+  eq((await p.locator('h3.annot-fiche-t').allInnerTexts()).map(t => t.split(' ')[0]), ['J2', 'N4']);
+  eq(await p.locator('.annot-items > li').count(), 4);
+  const lien = p.locator('a.annot-lien').nth(1); eq(await lien.getAttribute('href'), 'fiches/n04.html#annot-abcdefgh1234');
+  await p.getByLabel('Seulement les passages commentés').check(); eq(await p.locator('.annot-items > li').count(), 1);
+  await p.getByLabel('Seulement les passages commentés').uncheck(); await p.getByLabel('Jaune').uncheck(); await p.getByLabel('Notes de fiche').uncheck();
+  eq(await p.locator('.annot-items > li').count(), 2);
+  await p.getByLabel('Vert').uncheck(); await p.getByLabel('Rose').uncheck(); ok(/Aucune annotation ne correspond/.test(await p.locator('.annot-contenu').innerText()));
+  await p.getByLabel('Jaune').check(); await p.locator('a.annot-lien').first().click(); await p.waitForURL(/n04\.html#annot-abcdefgh1234$/);
+  await p.waitForFunction(() => document.querySelector('mark.annot-flash'), null, { timeout: 5000 });
+  await p.close();
+  reset(); const q = await open(ctxA, '/annotations.html'); await q.waitForFunction(() => /Aucune annotation pour l’instant/.test(document.querySelector('.annot-resume-liste').textContent), null, { timeout: 5000 });
+  ok(await q.locator('.annot-filtres').isHidden()); ok(/Comment faire/i.test(await q.locator('main').innerText())); await q.close();
+});
+
+await test('export / import avec annotations : fichier version 2, remplacement (avant/après), ancien fichier sans annotations, annotation invalide refusée par le service', async () => {
+  reset(); kv.store.set('revisees', '{"J1":true}'); setAnn('N4', [passageKV(), noteKV()], 2);
+  const p = await open(ctxA, '/export.html'); await attendreCompteur(p, '1 fiche sur 37 révisée');
+  ok(/vos annotations/.test(await p.locator('#suivi-export').innerText()));
+  const f = await dl(p); const j = JSON.parse(f.data);
+  eq(j.version, 2); eq(Object.keys(j.annotations), ['N4']); eq(j.annotations.N4.length, 2);
+  ok(/1 fiche révisée sur 37, 2 annotations/.test(await p.locator('.suivi-msg-sauv').innerText()), await p.locator('.suivi-msg-sauv').innerText());
+  // vandalisme puis restauration
+  kv.store.set('revisees', '{}'); setAnn('N4', [noteKV({ texte: 'n’importe quoi' })], 3); setAnn('P1', [noteKV({ id: 'vandale00001', texte: 'spam' })], 1);
+  await importFile(p, 'restaure.json', f.data); await p.locator('.suivi-confirm:not([hidden])').waitFor();
+  ok(/Fiches révisées : 0 avant, 1 après .*Annotations : 2 avant, 2 après/.test(await p.locator('.suivi-confirm').innerText()), await p.locator('.suivi-confirm').innerText());
+  await p.getByRole('button', { name: 'Remplacer' }).click(); await p.waitForFunction(() => /Import terminé/.test(document.querySelector('.suivi-msg-sauv').textContent), null, { timeout: 8000 });
+  eq(serverState(), { J1: true }); eq(annList('N4'), [passageKV(), noteKV()]); eq(annList('P1'), []);
+  // ancien fichier (version 1) : seules les fiches révisées sont remplacées
+  await importFile(p, 'v1.json', JSON.stringify({ version: 1, revisees: tousFalse(['C1']) })); await p.locator('.suivi-confirm:not([hidden])').waitFor();
+  ok(/2 annotations actuelles sont conservées/.test(await p.locator('.suivi-confirm').innerText()));
+  await p.getByRole('button', { name: 'Remplacer' }).click(); await p.waitForFunction(() => /Import terminé/.test(document.querySelector('.suivi-msg-sauv').textContent), null, { timeout: 8000 });
+  eq(serverState(), { C1: true }); eq(annList('N4').length, 2);
+  // fichier modifié à la main avec une annotation invalide : refus du service, rien ne change
+  const bad = JSON.parse(f.data); bad.annotations.N4[0].couleur = 7; bad.revisees.P7 = true;
+  await importFile(p, 'bad-annot.json', JSON.stringify(bad)); await p.locator('.suivi-confirm:not([hidden])').waitFor();
+  await p.getByRole('button', { name: 'Remplacer' }).click();
+  await p.waitForFunction(() => /Import refusé par le service : N4 : Couleur invalide/.test(document.querySelector('.suivi-msg-sauv').textContent), null, { timeout: 8000 });
+  eq(serverState(), { C1: true }); eq(annList('N4').length, 2);
+  // annotations de code inconnu : refus côté page
+  await importFile(p, 'bad-code.json', JSON.stringify({ version: 2, revisees: {}, annotations: { Z9: [] } }));
+  await p.waitForFunction(() => /Code de fiche inconnu dans les annotations : Z9/.test(document.querySelector('.suivi-msg-sauv').textContent), null, { timeout: 5000 });
+  await p.close();
+});
+
+await test('impression : surlignages imprimés en couleur, bulles remplacées par des numéros, commentaires et notes en fin de page, outils masqués', async () => {
+  reset(); setAnn('N4', [passageKV({ commentaire: 'Commentaire imprimé' }), noteKV()], 1);
+  const p = await open(ctxA, '/fiches/n04.html'); await p.locator('mark.annot').first().waitFor(); await p.emulateMedia({ media: 'print' });
+  const st = await p.evaluate(() => { const m = document.querySelector('mark.annot'), b = document.querySelector('.annot-bulle'), cs = getComputedStyle(m);
+    return { bg: cs.backgroundColor, adj: cs.printColorAdjust || cs.webkitPrintColorAdjust, num: getComputedStyle(b.querySelector('.annot-num')).display, avant: getComputedStyle(b, '::before').display,
+      tete: getComputedStyle(document.querySelector('.annot-tete')).display, notes: getComputedStyle(document.querySelector('.annot-notes')).display, barre: getComputedStyle(document.querySelector('.annot-barre')).display,
+      imp: getComputedStyle(document.querySelector('.annot-impression')).display, txt: document.querySelector('.annot-impression').innerText }; });
+  eq([st.bg, st.adj, st.num, st.avant, st.tete, st.notes, st.barre, st.imp], ['rgb(255, 235, 128)', 'exact', 'inline', 'none', 'none', 'none', 'none', 'block']);
+  ok(/Mes annotations — N4/.test(st.txt) && /Commentaire imprimé/.test(st.txt) && /Ma note de test/.test(st.txt), st.txt);
+  const pdf = await p.pdf({ format: 'A4', landscape: true, printBackground: false }); ok(pdf.length > 10000, 'PDF généré');
+  await p.emulateMedia({ media: 'screen' }); eq(await p.locator('.annot-impression').evaluate(e => getComputedStyle(e).display), 'none');
+  await p.close();
+});
+
+await test('téléphone Android émulé (412 px, tactile) : sélection, toucher « Jaune », toucher le surlignage, dialogue ; rien ne déborde à 360 px', async () => {
+  reset();
+  const ctx = await newCtx({ viewport: { width: 412, height: 860 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2.6, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36' });
+  const p = await open(ctx, '/fiches/n04.html'); await attendreAnnot(p);
+  await selectionner(p, 'proportionnalité inverse'); await attendreBarre(p);
+  const bb = await barre(p).boundingBox(); ok(bb.x >= 0 && bb.x + bb.width <= 412 && bb.y + bb.height <= 860, 'barre dans l\'écran : ' + JSON.stringify(bb));
+  const tailles = await barre(p).locator('button').evaluateAll(bs => bs.map(b => b.getBoundingClientRect().height)); ok(tailles.every(h => h >= 36), 'boutons assez grands : ' + tailles);
+  await barre(p).getByRole('button', { name: 'Surligner en jaune' }).tap(); await attendreMsg(p, /^Enregistré$/);
+  await p.locator('mark.annot').first().tap(); const dlg = p.locator('dialog.annot-dialogue'); await dlg.waitFor();
+  const db = await dlg.boundingBox(); ok(db.x >= 0 && db.x + db.width <= 412, 'dialogue dans l\'écran');
+  eq(await dlg.locator('textarea').count(), 0, 'lecture d\'abord');
+  await dlg.getByRole('button', { name: 'Commenter ou changer la couleur' }).tap();
+  ok(await p.evaluate(() => document.activeElement && document.activeElement.type === 'radio'), 'au toucher, le curseur n\'est pas placé dans le commentaire (pas de clavier)');
+  await dlg.getByLabel('Commentaire', { exact: true }).fill('Depuis le téléphone'); await dlg.getByRole('button', { name: 'Enregistrer' }).tap();
+  await p.waitForFunction(() => { const d = document.querySelector('dialog.annot-dialogue'); return d.open && d.querySelector('.annot-lecture'); }); eq(annList('N4')[0].commentaire, 'Depuis le téléphone');
+  await dlg.getByRole('button', { name: 'Fermer' }).tap(); await p.waitForFunction(() => !document.querySelector('dialog.annot-dialogue').open);
+  await p.locator('.annot-bulle').tap(); await dlg.waitFor(); eq(await dlg.locator('.annot-lecture').innerText(), 'Depuis le téléphone'); await dlg.getByRole('button', { name: 'Fermer' }).tap();
+  ok(await p.locator('.annot-infobulle').isHidden(), 'pas d\'info-bulle au toucher');
+  await p.close(); await ctx.close();
+  const c360 = await newCtx({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true });
+  setAnn('N4', [passageKV({ commentaire: 'x'.repeat(300) }), noteKV({ texte: 'mot'.repeat(200) }), passageKV({ id: 'orph00000009', texte: 'introuvable' })], 1);
+  for (const u of ['/fiches/n04.html', '/annotations.html']) {
+    const q = await open(c360, u); await q.waitForTimeout(800);
+    if (u.startsWith('/fiches')) { await selectionner(q, 'Un même outil, deux logiques'); await attendreBarre(q); }
+    const d = await sansDebord(q); ok(d.sw <= d.cw, `${u} : scrollWidth ${d.sw} > ${d.cw}`);
+    if (u.startsWith('/fiches')) { await q.locator('mark.annot').first().tap(); await q.locator('dialog.annot-dialogue').waitFor(); const d2 = await sansDebord(q); ok(d2.sw <= d2.cw, 'dialogue : ' + d2.sw); }
+    await q.close();
+  }
+  await c360.close();
+});
+
+await test('annotations : aucune donnée dans le stockage du navigateur', async () => {
+  const ctx = await newCtx(); reset();
+  const p = await open(ctx, '/fiches/n04.html'); await attendreAnnot(p);
+  await selectionner(p, 'proportionnalité inverse'); await attendreBarre(p); await barre(p).getByRole('button', { name: 'Surligner en jaune' }).click(); await attendreMsg(p, /^Enregistré$/);
+  const q = await open(ctx, '/annotations.html'); await q.locator('.annot-items').waitFor();
+  for (const pg of [p, q]) {
+    const s = await pg.evaluate(async () => ({ ls: Object.keys(localStorage), ss: Object.keys(sessionStorage), ck: document.cookie, idb: indexedDB.databases ? (await indexedDB.databases()).length : 0 }));
+    eq(s.ls, []); eq(s.ck, ''); eq(s.idb, 0); ok(s.ss.every(k => k === 'cappei-menu-v1'), 'sessionStorage : ' + s.ss);
+  }
+  await ctx.close();
+});
+
 console.log('\nSuivi inactif (apiUrl vide)');
 await test('aucun élément ajouté, aucun script de suivi, aucune requête vers le service', async () => {
   reset(); const n = journal.length; const reqs = []; const ctx = await newCtx();
   for (const u of ['/fiches/n04.html', '/index.html', '/index-sigles.html']) {
     const p = await ctx.newPage(); p.on('request', r => reqs.push(r.url())); await p.goto(`http://localhost:${portOff}${u}`); await p.waitForTimeout(500);
-    eq(await p.locator('[class*="suivi"], #suivi-revisee').count(), 0, u + ' : éléments de suivi'); eq(await p.locator('#menu .suivi-ok').count(), 0);
+    eq(await p.evaluate(() => [...document.scripts].some(x => /annot\.js/.test(x.src))), false, u + ' : annot.js chargé');
+    eq(await p.locator('[class*="suivi"], #suivi-revisee, [class*="annot"]').count(), 0, u + ' : éléments de suivi ou d\'annotation'); eq(await p.locator('#menu .suivi-ok').count(), 0);
     eq(await p.evaluate(() => typeof window.CAPPEI_API), 'undefined'); await p.close();
   }
   ok(reqs.every(r => r.startsWith(`http://localhost:${portOff}/`)), 'requêtes externes : ' + reqs.filter(r => !r.startsWith(`http://localhost:${portOff}/`)));

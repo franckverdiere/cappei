@@ -181,6 +181,7 @@ const indexPages = [
 const HOME = { code: 'Accueil', slug: 'accueil', file: 'index.html', label: 'Fiches de révision CAPPEI' };
 const EMPLOI = { code: 'Mode d’emploi', slug: 'mode-emploi', file: 'mode-emploi.html', label: 'Mode d’emploi', solo: true };
 const EXPORT = { code: 'Export', slug: 'export', file: 'export.html', label: 'Export', solo: true };
+const ANNOT = { code: 'Mes annotations', slug: 'annotations', file: 'annotations.html', label: 'Mes annotations', solo: true };
 const sequence = [...pages, ...indexPages];
 
 /* ------------------------------------------------------------------ Rendu */
@@ -284,7 +285,7 @@ function renderNav(current) {
   const home = current === HOME ? ' aria-current="page"' : '';
   return `<nav id="menu" class="sidebar" aria-label="Menu principal">
 <a class="menu-home" href="${relHref(current.file, 'index.html')}"${home}>Accueil</a>
-${[EMPLOI, ...(ACTIVE_API ? [EXPORT] : [])].map(x => `<a class="menu-extra" href="${relHref(current.file, x.file)}"${current === x ? ' aria-current="page"' : ''}>${esc(x.label)}</a>`).join('\n')}
+${[EMPLOI, ...(ACTIVE_API ? [ANNOT, EXPORT] : [])].map(x => `<a class="menu-extra" href="${relHref(current.file, x.file)}"${current === x ? ' aria-current="page"' : ''}>${esc(x.label)}</a>`).join('\n')}
 ${PARTS.map(part).join('\n')}
 </nav>`;
 }
@@ -310,7 +311,7 @@ function pageShell({ page, title, body, legend, head }) {
 <script>document.documentElement.className+=' js'</script>
 <link rel="stylesheet" href="${up}assets/style.css?v=${ASSET_V}">
 ${apiUrl ? `<script src="${up}assets/config.js?v=${ASSET_V}" defer></script>\n` : ''}<script src="${up}assets/site.js?v=${ASSET_V}" defer></script>
-${apiUrl ? `<script src="${up}assets/suivi.js?v=${ASSET_V}" defer></script>\n` : ''}</head>
+${apiUrl ? `<script src="${up}assets/suivi.js?v=${ASSET_V}" defer></script>\n<script src="${up}assets/annot.js?v=${ASSET_V}" defer></script>\n` : ''}</head>
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="site-header">
@@ -352,11 +353,28 @@ ${page.fiches.map((f, i) => renderFiche(f, ctx, ids[i], 2)).join('\n')}
 /* Accueil : bandeau du classeur (cover1 sans son mode d'emploi), suivi (suivi.js), plan (cover2). Le mode d'emploi (blocs de cover1) a sa page. */
 function coverHome() {
   const liens = ['**Mode d’emploi** du classeur, code couleur et règles suivies.'];
-  if (ACTIVE_API) liens.push('**Export** du suivi de la révision : copie de sécurité et import.');
+  if (ACTIVE_API) liens.push('**Mes annotations** : surlignages, commentaires et notes de toutes les fiches.');
+  if (ACTIVE_API) liens.push('**Export** du suivi de la révision et des annotations : copie de sécurité et import.');
   return { ...cover1, blocks: liens.map(p => ({ p })) };
 }
 const coverEmploi = () => ({ cat: cover1.cat, code: '', bannerLabel: cover1.bannerLabel, title: 'Mode d’emploi du classeur', subtitle: null, blocks: cover1.blocks });
-const COVER_EXPORT = { cat: 'classeur', code: '', bannerLabel: 'CAPPEI  ·  SUIVI DE LA RÉVISION', title: 'Export du suivi', subtitle: null, blocks: [] };
+const COVER_EXPORT = { cat: 'classeur', code: '', bannerLabel: 'CAPPEI  ·  SUIVI DE LA RÉVISION', title: 'Export du suivi et des annotations', subtitle: null, blocks: [] };
+/* Page « Mes annotations » : aide (statique) + liste construite par annot.js dans #annot-liste. Texte propre au site (pas un contenu de cours). */
+const COVER_ANNOT = { cat: 'classeur', code: '', bannerLabel: 'CAPPEI  ·  ANNOTATIONS', title: 'Mes annotations', subtitle: 'Surlignages, commentaires et notes de toutes les fiches', blocks: [
+  { h: 'Toutes les annotations', kind: 'neutre' },
+] };
+/* Aide placée APRÈS la liste (on vient d'abord lire ses annotations). */
+const AIDE_ANNOT = [
+  { h: 'Comment faire', kind: 'neutre' },
+  { ul: [
+    'Sur une fiche, **sélectionnez un passage** (sur tablette ou téléphone : appui long sur un mot, puis étirez la sélection) : une barre apparaît en bas de l’écran pour choisir une **couleur** (jaune, vert, rose) ou **commenter** le passage.',
+    '**Touchez ou cliquez un passage surligné** (ou sa bulle numérotée, présente quand il est commenté) pour **lire** son commentaire ; les boutons « Modifier » et « Supprimer » permettent ensuite de changer la couleur ou le commentaire, ou de supprimer le surlignage. À la souris, survoler un passage commenté affiche aussi le commentaire.',
+    'Un surlignage tient dans **un seul paragraphe**, une seule puce ou une seule case de tableau.',
+    'Les **notes sur une fiche entière** se trouvent en bas de chaque fiche (« Mes notes sur cette fiche »).',
+    'Les annotations sont enregistrées sur le service en ligne, comme les fiches révisées : on les retrouve sur tous les appareils. Pensez à les **exporter** de temps en temps (page Export).',
+    'À l’impression d’une fiche, les surlignages sont imprimés et les commentaires sont numérotés, puis repris en fin de fiche avec les notes.',
+  ] },
+];
 function renderHome() {
   const ctx = { file: HOME.file, boldLinks: {
     '1. Rapports de jury': pages.find(p => p.part.id === 'jury').file,
@@ -364,7 +382,7 @@ function renderHome() {
     '3. Notions': pages.find(p => p.part.id === 'notions').file,
     '4. Publics et disciplines': pages.find(p => p.part.id === 'publics').file,
     'Index': indexPages[0].file, 'Auteurs': indexPages[0].file, 'Sigles': indexPages[1].file,
-    'Mode d’emploi': EMPLOI.file, 'Export': EXPORT.file,
+    'Mode d’emploi': EMPLOI.file, 'Export': EXPORT.file, 'Mes annotations': ANNOT.file,
   } };
   const body = `<div class="fiches accueil">
 ${renderFiche(coverHome(), ctx, 'accueil-1', 1)}
@@ -383,6 +401,14 @@ function renderExport() {
   const f = renderFiche(COVER_EXPORT, { file: EXPORT.file }, 'export-1', 1).replace('<div class="fiche-body">\n\n</div>',
     '<div class="fiche-body"><div id="suivi-export" class="suivi-export"><p>Cette page a besoin de JavaScript pour exporter ou importer le suivi.</p></div></div>');
   return pageShell({ page: EXPORT, title: `Export du suivi — ${SITE}`, body: `<div class="fiches accueil">\n${f}\n</div>`, legend: null });
+}
+
+function renderAnnot() {
+  const f = renderFiche(COVER_ANNOT, { file: ANNOT.file }, 'annotations-1', 1);
+  const fin = '\n</div>\n</article>';
+  if (!f.endsWith(fin)) throw new Error('renderAnnot : fin de fiche inattendue');
+  const g = f.slice(0, -fin.length) + '\n<div id="annot-liste" class="annot-liste"><p>Cette page a besoin de JavaScript pour afficher les annotations.</p></div>\n' + renderBlocks(AIDE_ANNOT, { file: ANNOT.file }) + fin;
+  return pageShell({ page: ANNOT, title: `Mes annotations — ${SITE}`, body: `<div class="fiches accueil">\n${g}\n</div>`, legend: null });
 }
 
 /* ------------------------------------------------------------------ CSS généré (couleurs) */
@@ -405,22 +431,24 @@ function build(opts) {
   fs.writeFileSync(path.join(out, '.nojekyll'), '');
   const active = !!ACTIVE_API;
   // Suivi inactif (apiUrl vide) : style.css et site.js sont identiques octet pour octet à ceux d'avant la fonctionnalité ; seul config.js s'ajoute (non référencé par les pages).
-  fs.writeFileSync(path.join(out, 'assets', 'style.css'), colorCss() + fs.readFileSync(path.join(ROOT, 'src', 'style.css'), 'utf8') + (active ? '\n' + fs.readFileSync(path.join(ROOT, 'src', 'suivi.css'), 'utf8') : ''));
+  fs.writeFileSync(path.join(out, 'assets', 'style.css'), colorCss() + fs.readFileSync(path.join(ROOT, 'src', 'style.css'), 'utf8') + (active ? '\n' + fs.readFileSync(path.join(ROOT, 'src', 'suivi.css'), 'utf8') + '\n' + fs.readFileSync(path.join(ROOT, 'src', 'annot.css'), 'utf8') : ''));
   fs.writeFileSync(path.join(out, 'assets', 'site.js'), fs.readFileSync(path.join(ROOT, 'src', 'site.js'), 'utf8'));
   fs.writeFileSync(path.join(out, 'assets', 'config.js'), configJs(ACTIVE_API));
   if (active) fs.writeFileSync(path.join(out, 'assets', 'suivi.js'), fs.readFileSync(path.join(ROOT, 'src', 'suivi.js'), 'utf8'));
-  ASSET_V = require('crypto').createHash('sha256').update(['style.css', 'site.js', 'config.js', 'suivi.js'].map(f => { const q = path.join(out, 'assets', f); return fs.existsSync(q) ? fs.readFileSync(q) : ''; }).join('\0')).digest('hex').slice(0, 8);
+  if (active) fs.writeFileSync(path.join(out, 'assets', 'annot.js'), fs.readFileSync(path.join(ROOT, 'src', 'annot.js'), 'utf8'));
+  ASSET_V = require('crypto').createHash('sha256').update(['style.css', 'site.js', 'config.js', 'suivi.js', 'annot.js'].map(f => { const q = path.join(out, 'assets', f); return fs.existsSync(q) ? fs.readFileSync(q) : ''; }).join('\0')).digest('hex').slice(0, 8);
   fs.writeFileSync(path.join(out, HOME.file), renderHome());
   fs.writeFileSync(path.join(out, EMPLOI.file), renderEmploi());
   if (active) fs.writeFileSync(path.join(out, EXPORT.file), renderExport());
+  if (active) fs.writeFileSync(path.join(out, ANNOT.file), renderAnnot());
   for (const p of sequence) fs.writeFileSync(path.join(out, p.file), renderPage(p));
-  return { pages: sequence.length + 2 + (active ? 1 : 0), refs: REFLOG.length, out, active };
+  return { pages: sequence.length + 2 + (active ? 2 : 0), refs: REFLOG.length, out, active };
 }
 /* Les 37 codes de pages de fiches (J, C, N, P), dans l'ordre du site : copiés dans config.js pour valider l'import côté navigateur. */
 const CODES = pages.map(p => p.code);
 const configJs = api => '/* Généré par build_site.js (config.json / API_URL). Adresse vide = suivi « fiche révisée » inactif. */\nwindow.CAPPEI_API = ' + JSON.stringify(api) + ';\nwindow.CAPPEI_CODES = ' + JSON.stringify(CODES) + ';\n';
 
-module.exports = { coverHome, coverEmploi, EMPLOI, EXPORT, CODES, API_URL, anonymise: t => anonymise(t), anonymiseWith, loadAnonymisationList, cover1, cover2, pages, indexPages, sequence, REFLOG, REF_UNKNOWN, COLOR_CHANGES, CATC, build };
+module.exports = { coverHome, coverEmploi, EMPLOI, EXPORT, ANNOT, COVER_ANNOT, AIDE_ANNOT, CODES, API_URL, anonymise: t => anonymise(t), anonymiseWith, loadAnonymisationList, cover1, cover2, pages, indexPages, sequence, REFLOG, REF_UNKNOWN, COLOR_CHANGES, CATC, build };
 
 if (require.main === module) {
   const r = build();

@@ -1,0 +1,21 @@
+# Configuration du déploiement du service par GitHub Actions (.github/workflows/deploiement-service.yml).
+# Reprend à l'identique les réglages du Worker créé dans le tableau de bord le 15 novembre 2026 :
+# nom, liaison KV « REVISIONS » vers l'espace « revisions-cappei », date de compatibilité, journaux activés.
+# Ces identifiants ne sont pas secrets (la clé d'accès, elle, est un secret du dépôt : CLOUDFLARE_API_TOKEN).
+name = "cappei-revisions"
+main = "worker.mjs"
+account_id = "17eed7acd7a0404bba5ef1235b6befad"
+compatibility_date = "2026-11-15"
+workers_dev = true
+keep_vars = true
+
+[[kv_namespaces]]
+binding = "REVISIONS"
+id = "6bb968ece76d4a31a0955faa60a5bb3b"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true

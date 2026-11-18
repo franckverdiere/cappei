@@ -8,7 +8,7 @@
   if (!API || !CODES.length) { return; }
   var TOTAL = CODES.length;
   var TIMEOUT_MS = 10000;
-  var MAX_FILE = 16 * 1024;
+  var MAX_FILE = 2 * 1024 * 1024;
   var MSG_INDISPO = 'Suivi indisponible : impossible de joindre le service.';
   var MSG_ECHEC = 'Impossible d’enregistrer : le service est injoignable.';
 
@@ -31,7 +31,8 @@
   function copy(o) { var r = {}; Object.keys(o).forEach(function (k) { r[k] = o[k]; }); return r; }
 
   /* ---------- appels au service (aucune mise en mémoire locale) ---------- */
-  function appel(method, path, body) {
+  /* Appel générique : renvoie le JSON reçu ; en cas de refus, l'erreur porte le statut HTTP et le message du service. */
+  function appelBrut(method, path, body) {
     var ctl = typeof AbortController === 'function' ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, TIMEOUT_MS) : null;
     var init = { method: method, cache: 'no-store', credentials: 'omit', headers: {} };
@@ -39,21 +40,36 @@
     if (ctl) { init.signal = ctl.signal; }
     return fetch(API + path, init).then(function (r) {
       if (timer) { clearTimeout(timer); }
-      if (!r.ok) { throw new Error('HTTP ' + r.status); }
-      return r.json();
-    }, function (e) { if (timer) { clearTimeout(timer); } throw e; }).then(function (data) {
-      if (!data || !isPlain(data.revisees)) { throw new Error('réponse inattendue'); }
-      var etat = {};
-      Object.keys(data.revisees).forEach(function (k) { if (CODES.indexOf(k) !== -1 && data.revisees[k] === true) { etat[k] = true; } });
-      return etat;
-    });
+      return r.text().then(function (t) {
+        var d = null; try { d = t ? JSON.parse(t) : null; } catch (e) { d = null; }
+        if (!r.ok) { var err = new Error(d && typeof d.message === 'string' ? d.message : 'HTTP ' + r.status); err.status = r.status; throw err; }
+        return d;
+      });
+    }, function (e) { if (timer) { clearTimeout(timer); } throw e; });
   }
+  function etatDe(data) {
+    if (!data || !isPlain(data.revisees)) { throw new Error('réponse inattendue'); }
+    var etat = {};
+    Object.keys(data.revisees).forEach(function (k) { if (CODES.indexOf(k) !== -1 && data.revisees[k] === true) { etat[k] = true; } });
+    return etat;
+  }
+  function appel(method, path, body) { return appelBrut(method, path, body).then(etatDe); }
   function lire() { return appel('GET', '/api/revisions'); }
   function ecrireFiche(code, val) { return appel('PUT', '/api/revisions/' + encodeURIComponent(code), { revisee: val }); }
-  function remplacerTout(etat) {
-    var obj = {}; CODES.forEach(function (c) { obj[c] = etat[c] === true; });
-    return appel('PUT', '/api/revisions', { revisees: obj });
+  /* Sauvegarde complète (fiches révisées + annotations) : export et import. */
+  function annotationsDe(data) {
+    var a = data && isPlain(data.annotations) ? data.annotations : {}, out = {};
+    CODES.forEach(function (c) { if (Array.isArray(a[c]) && a[c].length) { out[c] = a[c]; } });
+    return out;
   }
+  function lireSauvegarde() { return appelBrut('GET', '/api/sauvegarde').then(function (d) { return { etat: etatDe(d), annotations: annotationsDe(d) }; }); }
+  function remplacerSauvegarde(etat, annotations) {
+    var obj = {}; CODES.forEach(function (c) { obj[c] = etat[c] === true; });
+    var corps = { revisees: obj };
+    if (annotations) { corps.annotations = annotations; }
+    return appelBrut('PUT', '/api/sauvegarde', corps).then(function (d) { return { etat: etatDe(d), annotations: annotationsDe(d) }; });
+  }
+  function compterAnnotations(a) { var n = 0; Object.keys(a || {}).forEach(function (c) { n += a[c].length; }); return n; }
 
   /* ---------- état en mémoire de la page (non conservé) ---------- */
   var etat = {};
@@ -171,7 +187,7 @@
     confirmation.hidden = true;
     zoneExport.textContent = '';
     [el('p', { class: 'suivi-avis' }, [statut, retry]),
-     el('p', { text: 'Le suivi est enregistré sur un service en ligne, pas dans ce navigateur. Exportez-le de temps en temps pour en garder une copie ; importer un fichier remplace tout le suivi actuel.' }),
+     el('p', { text: 'Le suivi de la révision (fiches révisées) et vos annotations (surlignages, commentaires, notes) sont enregistrés sur un service en ligne, pas dans ce navigateur. Exportez-les de temps en temps pour en garder une copie : si quelqu’un modifiait ou effaçait vos annotations, vous pourriez les restaurer. Importer un fichier remplace tout le contenu actuel.' }),
      el('p', { class: 'suivi-actions' }, [bExp, bImp, fichier]), confirmation, msgSauvEl].forEach(function (n) { zoneExport.appendChild(n); });
     sauv = { bExp: bExp, bImp: bImp, fichier: fichier, msg: msgSauvEl, confirmation: confirmation };
 
@@ -254,15 +270,16 @@
   function exporter() {
     if (occupe) { return; }
     bloquer(true); msgSauv('Export…');
-    lire().then(function (serveur) {   // l'export lit l'état sur le service, pas une copie locale
+    lireSauvegarde().then(function (sv) {   // l'export lit l'état sur le service, pas une copie locale
+      var serveur = sv.etat;
       var revisees = {}; CODES.forEach(function (c) { revisees[c] = serveur[c] === true; });
-      var contenu = JSON.stringify({ version: 1, exporte_le: new Date().toISOString(), revisees: revisees }, null, 2) + '\n';
+      var contenu = JSON.stringify({ version: 2, exporte_le: new Date().toISOString(), revisees: revisees, annotations: sv.annotations }, null, 2) + '\n';
       var url = URL.createObjectURL(new Blob([contenu], { type: 'application/json' }));
       var a = el('a', { href: url, download: 'revisions-cappei-' + dateLocale() + '.json' });
       a.style.display = 'none'; document.body.appendChild(a); a.click();
       setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
       etat = serveur; occupe = false; rendre();
-      msgSauv('Fichier exporté : ' + plural(countTrue(serveur), 'fiche révisée', 'fiches révisées') + ' sur ' + TOTAL + '.');
+      msgSauv('Fichier exporté : ' + plural(countTrue(serveur), 'fiche révisée', 'fiches révisées') + ' sur ' + TOTAL + ', ' + plural(compterAnnotations(sv.annotations), 'annotation', 'annotations') + '.');
     }, function () { occupe = false; rendre(); msgSauv('Export impossible : le service est injoignable.', true); });
   }
 
@@ -271,7 +288,7 @@
     var d;
     try { d = JSON.parse(texte); } catch (e) { return { erreur: 'Ce fichier n’est pas un JSON valide.' }; }
     if (!isPlain(d)) { return { erreur: 'Ce fichier n’a pas le format d’une sauvegarde du suivi (objet JSON attendu).' }; }
-    if (d.version !== 1) { return { erreur: 'Version de sauvegarde non reconnue (attendu : 1).' }; }
+    if (d.version !== 1 && d.version !== 2) { return { erreur: 'Version de sauvegarde non reconnue (attendu : 1 ou 2).' }; }
     if (!isPlain(d.revisees)) { return { erreur: 'Le champ « revisees » est absent ou n’est pas un objet.' }; }
     var out = {}, inconnus = [], mauvais = [];
     Object.keys(d.revisees).forEach(function (k) {
@@ -280,7 +297,15 @@
     if (inconnus.length) { return { erreur: 'Code de fiche inconnu : ' + inconnus.slice(0, 5).map(function (x) { return x.slice(0, 20); }).join(', ') + '.' }; }
     if (mauvais.length) { return { erreur: 'La valeur de ' + mauvais.slice(0, 5).join(', ') + ' doit être true ou false.' }; }
     CODES.forEach(function (c) { if (out[c] === undefined) { out[c] = false; } });   // code absent du fichier : non révisée
-    return { revisees: out };
+    if (d.version === 1) { return { revisees: out, annotations: null }; }   // ancien fichier : les annotations actuelles sont conservées
+    if (!isPlain(d.annotations)) { return { erreur: 'Le champ « annotations » est absent ou n’est pas un objet.' }; }
+    var ann = {}, inc = [];
+    Object.keys(d.annotations).forEach(function (k) {
+      if (CODES.indexOf(k) === -1) { inc.push(k); } else if (!Array.isArray(d.annotations[k]) || d.annotations[k].some(function (a) { return !isPlain(a); })) { mauvais.push(k); } else if (d.annotations[k].length) { ann[k] = d.annotations[k]; }
+    });
+    if (inc.length) { return { erreur: 'Code de fiche inconnu dans les annotations : ' + inc.slice(0, 5).map(function (x) { return x.slice(0, 20); }).join(', ') + '.' }; }
+    if (mauvais.length) { return { erreur: 'Les annotations de ' + mauvais.slice(0, 5).join(', ') + ' doivent être une liste.' }; }
+    return { revisees: out, annotations: ann };   // le contenu de chaque annotation est vérifié par le service avant toute écriture
   }
 
   function fermerConfirmation(focusBtn) {
@@ -296,31 +321,36 @@
     lecteur.onload = function () {
       var v = valider(String(lecteur.result));
       if (v.erreur) { msgSauv('Import refusé : ' + v.erreur + ' Le suivi n’a pas été modifié.', true); return; }
-      bloquer(true); msgSauv('Vérification du suivi actuel…');
-      lire().then(function (serveur) {
-        etat = serveur; occupe = false; rendre(); msgSauv('');
-        proposer(v.revisees, countTrue(serveur));
-      }, function () { occupe = false; rendre(); msgSauv('Import impossible : le service est injoignable. Le suivi n’a pas été modifié.', true); });
+      bloquer(true); msgSauv('Vérification du contenu actuel…');
+      lireSauvegarde().then(function (sv) {
+        etat = sv.etat; occupe = false; rendre(); msgSauv('');
+        proposer(v, countTrue(sv.etat), compterAnnotations(sv.annotations));
+      }, function () { occupe = false; rendre(); msgSauv('Import impossible : le service est injoignable. Rien n’a été modifié.', true); });
     };
     lecteur.readAsText(fic);
   }
-  function proposer(nouveau, avant) {
-    var apres = countTrue(nouveau);
+  function proposer(v, avant, annAvant) {
+    var nouveau = v.revisees, apres = countTrue(nouveau);
     var c = sauv.confirmation; c.textContent = '';
     var ok = el('button', { type: 'button', class: 'suivi-btn suivi-btn-danger', text: 'Remplacer' });
     var non = el('button', { type: 'button', class: 'suivi-btn', text: 'Annuler' });
-    c.appendChild(el('p', { id: 'suivi-confirm-t', class: 'suivi-confirm-t', text: 'Remplacer le suivi actuel ? Fiches révisées : ' + avant + ' avant, ' + apres + ' après (sur ' + TOTAL + ').' }));
+    var txt = v.annotations
+      ? 'Remplacer le contenu actuel ? Fiches révisées : ' + avant + ' avant, ' + apres + ' après (sur ' + TOTAL + '). Annotations : ' + annAvant + ' avant, ' + compterAnnotations(v.annotations) + ' après.'
+      : 'Remplacer le suivi actuel ? Fiches révisées : ' + avant + ' avant, ' + apres + ' après (sur ' + TOTAL + ').';
+    c.appendChild(el('p', { id: 'suivi-confirm-t', class: 'suivi-confirm-t', text: txt }));
+    if (!v.annotations) { c.appendChild(el('p', { text: 'Ce fichier date d’avant les annotations : il ne contient que les fiches révisées. Vos ' + plural(annAvant, 'annotation actuelle est conservée', 'annotations actuelles sont conservées') + '.' })); }
     c.appendChild(el('p', { class: 'suivi-actions' }, [ok, non]));
     c.hidden = false; ok.focus();
-    non.addEventListener('click', function () { fermerConfirmation(true); msgSauv('Import annulé : le suivi n’a pas été modifié.'); });
+    non.addEventListener('click', function () { fermerConfirmation(true); msgSauv('Import annulé : rien n’a été modifié.'); });
     ok.addEventListener('click', function () {
       ok.disabled = true; non.disabled = true; bloquer(true); msgSauv('Import en cours…');
-      remplacerTout(nouveau).then(function (serveur) {
-        etat = serveur; occupe = false; fermerConfirmation(true); rendre();
-        msgSauv('Import terminé : ' + plural(countTrue(serveur), 'fiche révisée', 'fiches révisées') + ' sur ' + TOTAL + '.');
-      }, function () {
+      remplacerSauvegarde(nouveau, v.annotations).then(function (sv) {
+        etat = sv.etat; occupe = false; fermerConfirmation(true); rendre();
+        msgSauv('Import terminé : ' + plural(countTrue(sv.etat), 'fiche révisée', 'fiches révisées') + ' sur ' + TOTAL + ', ' + plural(compterAnnotations(sv.annotations), 'annotation', 'annotations') + '.');
+      }, function (e) {
         occupe = false; ok.disabled = false; non.disabled = false; rendre();
-        msgSauv('Import impossible : le service est injoignable. Le suivi n’a pas été modifié.', true);
+        if (e && (e.status === 400 || e.status === 413)) { fermerConfirmation(true); msgSauv('Import refusé par le service : ' + e.message + ' Rien n’a été modifié.', true); }
+        else { msgSauv('Import impossible : le service est injoignable. Rien n’a été modifié.', true); }
       });
     });
   }

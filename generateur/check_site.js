@@ -49,8 +49,8 @@ for (const [file, h] of Object.entries(html)) {
     if (url.startsWith('/')) fail(`${file} : lien absolu ${url} (doit être relatif)`);
   }
 }
-for (const f of ['assets/style.css', 'assets/site.js', 'assets/suivi.js']) {
-  if (!fs.existsSync(path.join(DOCS, f))) continue;     // suivi.js n'existe que si le suivi est actif
+for (const f of ['assets/style.css', 'assets/site.js', 'assets/suivi.js', 'assets/annot.js']) {
+  if (!fs.existsSync(path.join(DOCS, f))) continue;     // suivi.js et annot.js n'existent que si le suivi est actif
   const t = fs.readFileSync(path.join(DOCS, f), 'utf8');
   if (/https?:\/\/|@import|(?<![A-Za-z])url\(/i.test(t)) fail(`${f} : ressource externe ou url() détectée`);
 }
@@ -172,7 +172,9 @@ section('(d) Nombre de pages');
   const nN = themes.filter(f => /\/n\d\d\.html$/.test(f)).length, nP = themes.filter(f => /\/p\d\d\.html$/.test(f)).length;
   const idx = ['index-auteurs.html', 'index-sigles.html'].filter(f => html[f]).length, home = html['index.html'] ? 1 : 0;
   console.log(`  J=${nJ} C=${nC} N=${nN} P=${nP} index=${idx} accueil=${home} total=${htmlFiles.length}`);
-  if (nJ !== 6 || nC !== 8 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 40 + 1 + (html['export.html'] ? 1 : 0)) fail('nombre de pages inattendu (attendu 6+8+16+7+2+1 = 40, + mode d’emploi, + export si le suivi est actif)');
+  const actifPages = (html['export.html'] ? 1 : 0) + (html['annotations.html'] ? 1 : 0);
+  if (!!html['export.html'] !== !!html['annotations.html']) fail('export.html et annotations.html doivent exister ensemble (suivi actif) ou pas du tout');
+  if (nJ !== 6 || nC !== 8 || nN !== 16 || nP !== 7 || idx !== 2 || home !== 1 || htmlFiles.length !== 40 + 1 + actifPages) fail('nombre de pages inattendu (attendu 6+8+16+7+2+1 = 40, + mode d’emploi, + export et mes annotations si le suivi est actif)');
   const attendu = b => /^J/.test(b) ? 1 : ({ C2: 1, C3: 1, C4: 1, C5: 3, C6: 4, N15: 4 }[b] || 2);
   for (const [b, fs_] of groups) if (fs_.length !== attendu(b)) fail(`${b} : ${fs_.length} volets (attendu ${attendu(b)})`);
   const att = ['.nojekyll', 'assets/style.css', 'assets/site.js'].filter(f => !fs.existsSync(path.join(DOCS, f)));
@@ -272,8 +274,13 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     }
   }
   console.log(`  aucun usage de localStorage/indexedDB/cookie/Cache API dans assets/ et le HTML ; ${nExc} mention(s) de sessionStorage tolérée(s) (mémoire d'ouverture du menu, site.js d'origine, hors suivi)`);
-  const suiviJs = path.join(DOCS, 'assets/suivi.js');
-  if (fs.existsSync(suiviJs) && /sessionStorage/.test(fs.readFileSync(suiviJs, 'utf8'))) fail('suivi.js ne doit pas toucher sessionStorage');
+  for (const nom of ['suivi.js', 'annot.js']) {
+    const f = path.join(DOCS, 'assets', nom);
+    if (fs.existsSync(f) && /sessionStorage/.test(fs.readFileSync(f, 'utf8'))) fail(nom + ' ne doit pas toucher sessionStorage');
+  }
+  // annot.js : les textes saisis ne doivent jamais être injectés comme HTML
+  const annotJs = path.join(DOCS, 'assets/annot.js');
+  if (fs.existsSync(annotJs) && /\binnerHTML\b|\bouterHTML\b|insertAdjacentHTML|document\.write|\beval\s*\(|new Function/.test(fs.readFileSync(annotJs, 'utf8'))) fail('annot.js : innerHTML, insertAdjacentHTML, document.write ou eval interdits (textes saisis affichés comme du texte)');
 
   // (b) suivi inactif = site d'avant. Construction de référence avec apiUrl vide dans un dossier temporaire.
   const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'cappei-inactif-'));
@@ -289,23 +296,25 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
     console.log(`  instantané d'avant la fonctionnalité (ref-docs-hashes.json, ${Object.keys(ref).length} fichiers) : ` + (diff.length ? `${diff.length} fichier(s) diffèrent (${diff.slice(0, 4).join(', ')}) : normal si les fiches ou l'anonymisation ont changé depuis ; non bloquant` : 'tous identiques octet pour octet') + `${extra.length ? ' ; fichiers en plus : ' + extra.join(', ') : ''}`);
     if (extra.some(k => k !== 'assets/config.js' && k !== 'mode-emploi.html' && k !== 'fiches/c00.html' /* fiche C0 ajoutée le 18 novembre 2026 */)) fail('suivi inactif : fichiers en plus de config.js et mode-emploi.html : ' + extra.join(', '));
   }
-  const strip = h => h.replace(/\?v=[0-9a-f]{8}"/g, '"').replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi)\.js" defer><\/script>\n/g, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
-  if (/assets\/(?:config|suivi)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
+  const strip = h => h.replace(/\?v=[0-9a-f]{8}"/g, '"').replace(/<script src="(?:\.\.\/)?assets\/(?:config|suivi|annot)\.js" defer><\/script>\n/g, '')
+    .replace(/\n<a class="menu-extra" href="[^"]*annotations\.html">Mes annotations<\/a>/, '').replace(/\n<a class="menu-extra" href="[^"]*export\.html">Export<\/a>/, '')
+    .replace(/\n<p><strong><a href="annotations\.html">Mes annotations<\/a><\/strong>[^<]*<\/p>/, '').replace(/\n<p><strong><a href="export\.html">Export<\/a><\/strong>[^<]*<\/p>/, '');
+  if (/assets\/(?:config|suivi|annot)\.js/.test(Object.keys(inactif).map(k => k.endsWith('.html') ? fs.readFileSync(path.join(tmp, k), 'utf8') : '').join(''))) fail('suivi inactif : une page référence config.js ou suivi.js');
   if (active) {
     // Suivi actif : le HTML ne diffère du HTML inactif que par les deux balises script ; style.css = inactif + suivi.css ; site.js identique.
     let bad = 0;
     for (const f of htmlFiles) {
-      if (rel(f) === 'export.html') continue;   // page propre au suivi actif
+      if (rel(f) === 'export.html' || rel(f) === 'annotations.html') continue;   // pages propres au suivi actif
       const h = fs.readFileSync(f, 'utf8');
       const ref = strip(fs.readFileSync(path.join(tmp, rel(f)), 'utf8'));
       if (strip(h) !== ref) { bad++; fail(`${rel(f)} : le HTML actif diffère du HTML inactif au-delà des balises script`); }
       const up = rel(f).includes('/') ? '../' : '';
-      const order = [`${up}assets/config.js`, `${up}assets/site.js`, `${up}assets/suivi.js`].map(x => h.search(new RegExp('<script src="' + x.replace(/\./g, '\\.') + '\\?v=[0-9a-f]{8}" defer></script>')));
-      if (order.some(i => i < 0) || !(order[0] < order[1] && order[1] < order[2])) fail(`${rel(f)} : balises script config.js, site.js, suivi.js absentes ou mal ordonnées`);
+      const order = [`${up}assets/config.js`, `${up}assets/site.js`, `${up}assets/suivi.js`, `${up}assets/annot.js`].map(x => h.search(new RegExp('<script src="' + x.replace(/\./g, '\\.') + '\\?v=[0-9a-f]{8}" defer></script>')));
+      if (order.some(i => i < 0) || !(order[0] < order[1] && order[1] < order[2] && order[2] < order[3])) fail(`${rel(f)} : balises script config.js, site.js, suivi.js, annot.js absentes ou mal ordonnées`);
     }
     if (sha(fs.readFileSync(path.join(DOCS, 'assets/site.js'))) !== inactif['assets/site.js']) fail('site.js diffère entre suivi actif et inactif');
     if (!fs.readFileSync(path.join(DOCS, 'assets/style.css'), 'utf8').startsWith(fs.readFileSync(path.join(tmp, 'assets/style.css'), 'utf8'))) fail('style.css actif ne commence pas par le style.css inactif');
-    console.log(`  suivi actif : HTML des ${htmlFiles.length - 1} pages (hors export.html) = HTML inactif + 2 balises script + lien et phrase « Export » (config.js avant site.js, suivi.js après) ; site.js identique ; style.css = inactif + suivi.css`);
+    console.log(`  suivi actif : HTML des ${htmlFiles.length - 2} pages (hors export.html et annotations.html) = HTML inactif + 3 balises script + liens et phrases « Mes annotations » et « Export » (config.js avant site.js, suivi.js puis annot.js après) ; site.js identique ; style.css = inactif + suivi.css + annot.css`);
   } else {
     for (const f of htmlFiles) if (sha(fs.readFileSync(f)) !== inactif[rel(f)]) fail(rel(f) + ' : diffère de la construction avec apiUrl vide');
     console.log(`  suivi inactif : les ${htmlFiles.length} pages HTML sont identiques octet pour octet à une construction avec apiUrl vide ; aucune balise script ajoutée`);
@@ -332,6 +341,16 @@ section('(h) Suivi « fiche révisée » : stockage navigateur, suivi inactif = 
   const pairs = [['texte « révisée » du menu', pick('suivi-ok'), 'FFFFFF'], ['message d\'erreur', pick('suivi-err'), 'FFFFFF'], ['bouton Remplacer', 'FFFFFF', '8A1C1C'], ['texte sur l\'encadré de confirmation', '1F2933', 'FFF7E0'], ['texte d\'état désactivé', '4D5864', 'FFFFFF'], ['bandeau des blocs de l\'accueil', 'FFFFFF', site.CATC.classeur.color]];
   for (const [nom, a, b] of pairs) { const r = cr(a, b); if (r < 4.5) fail(`contraste insuffisant (${r.toFixed(2)}) : ${nom}`); }
   console.log('  contrastes AA : ' + pairs.map(([n, a, b]) => cr(a, b).toFixed(1)).join(' / ') + ' (≥ 4,5 requis)');
+  // annotations : texte, liens et repères de source sur les trois couleurs de surlignage ; info-bulle
+  const aCss = fs.readFileSync(path.join(__dirname, 'src', 'annot.css'), 'utf8');
+  const pickA = n => (aCss.match(new RegExp('--' + n + ': #([0-9a-fA-F]{6})')) || [])[1];
+  const fonds = [1, 2, 3].map(i => pickA('annot-' + i));
+  if (fonds.some(x => !x)) fail('annot.css : couleurs --annot-1..3 introuvables');
+  const pairsA = [];
+  fonds.forEach((bg, i) => { pairsA.push(['texte sur surlignage ' + (i + 1), '1F2933', bg], ['lien sur surlignage ' + (i + 1), '0B4F8A', bg], ['repère de source sur surlignage ' + (i + 1), pickA('annot-src'), bg]); });
+  pairsA.push(['info-bulle', 'FFFFFF', '1F2933'], ['bulle de commentaire (élément graphique, 3:1)', pickA('annot-bulle'), 'FFFFFF']);
+  for (const [nom, a, b] of pairsA) { const r = cr(a, b); if (r < 4.5) fail(`contraste insuffisant (${r.toFixed(2)}) : ${nom}`); }
+  console.log('  contrastes des annotations : min ' + Math.min(...pairsA.map(([n, a, b]) => cr(a, b))).toFixed(1) + ' (≥ 4,5 requis, ' + pairsA.length + ' paires)');
 }
 
 console.log('\n' + (failures ? `RÉSULTAT : ${failures} échec(s)` : 'RÉSULTAT : tous les contrôles passent'));

@@ -1,0 +1,51 @@
+# Déploie le service Cloudflare (Worker « cappei-revisions ») quand son code change sur la branche « site ».
+# Secret du dépôt nécessaire (Settings → Secrets and variables → Actions) :
+#   CLOUDFLARE_API_TOKEN   clé d'API Cloudflare limitée à ce seul Worker (« API token for external CI/CD », créée le 18 novembre 2026)
+# L'identifiant du compte et celui de l'espace KV sont dans generateur/worker/wrangler.toml (non secrets).
+# Les tests du service sont lancés avant ; s'ils échouent, rien n'est déployé.
+name: Déploiement du service
+
+on:
+  push:
+    branches: [site]
+    paths:
+      - 'generateur/worker/worker.mjs'
+      - 'generateur/worker/wrangler.toml'
+      - '.github/workflows/deploiement-service.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploiement-service
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tests du service
+        env:
+          OUT_DIR: ${{ github.workspace }}/docs
+        run: node --test generateur/worker/test_worker.mjs
+      - name: Vérifier la configuration
+        run: |
+          grep -q '^name = "cappei-revisions"$' generateur/worker/wrangler.toml
+          grep -q '^binding = "REVISIONS"$' generateur/worker/wrangler.toml
+          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN != '' && 'ok' || '' }}" ]; then echo "Secret CLOUDFLARE_API_TOKEN absent" >&2; exit 1; fi
+      - name: Déployer sur Cloudflare
+        working-directory: generateur/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx --yes wrangler@4 deploy
+      - name: Vérifier le service en ligne
+        run: |
+          sleep 5
+          curl -fsS https://cappei-revisions.franck-verdiere.workers.dev/api/revisions
+          echo
+          curl -fsS https://cappei-revisions.franck-verdiere.workers.dev/api/annotations/N4

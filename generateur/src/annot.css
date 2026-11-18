@@ -1,0 +1,138 @@
+/* Annotations : surlignages, commentaires, notes de fiche (ajouté à la feuille de style seulement si le suivi est actif).
+   Les trois couleurs n'ont pas de signification imposée. Contrastes AA vérifiés par check_site.js (texte, liens, repères de source). */
+:root { --annot-1: #ffeb80; --annot-2: #cdeec5; --annot-3: #f8d2e6; --annot-bulle: #1f4e8c; --annot-src: #555555; }
+
+/* Surlignages posés sur le texte des fiches (le texte lui-même n'est pas modifié) */
+mark.annot { padding: .05em 0; border-radius: .15em; cursor: pointer; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+mark.annot, mark.annot * { color: #1f2933; }
+mark.annot a, .t thead mark.annot a { color: #0b4f8a; }
+mark.annot .src { color: var(--annot-src); }
+mark.annot-c1 { background: var(--annot-1); }
+mark.annot-c2 { background: var(--annot-2); }
+mark.annot-c3 { background: var(--annot-3); }
+mark.annot:focus-visible { outline: 3px solid #1a5fd0; outline-offset: 1px; }
+mark.annot-flash { animation: annot-flash 1.6s ease-out 2; }
+@keyframes annot-flash { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 0 4px #1a5fd0; } }
+
+/* Bulle de commentaire : pastille numérotée en forme de bulle, après le passage ; le passage commenté est souligné.
+   La zone de toucher (::before) déborde de la pastille sans changer la mise en page. */
+mark.annot-commente { border-bottom: 2px solid var(--annot-bulle); }
+.annot-colle { white-space: nowrap; }
+mark.annot-coupe { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+mark.annot-suite { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.annot-bulle { position: relative; display: inline-block; min-width: 1.6em; height: 1.35em; margin: 0 .15em 0 .25em; padding: 0 .32em; vertical-align: .15em; font-family: var(--font); font-size: .8em; font-weight: 700; font-style: normal; line-height: 1.35em; letter-spacing: 0; text-transform: none; color: #fff; text-align: center; background: var(--annot-bulle); border: 0; border-radius: .45em; cursor: pointer; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0,0,0,.4); }
+.annot-bulle::after { content: ""; position: absolute; left: .38em; bottom: -.34em; border-style: solid; border-width: .4em .4em 0 0; border-color: var(--annot-bulle) transparent transparent transparent; }
+.annot-bulle::before { content: ""; position: absolute; top: -.6em; right: -.5em; bottom: -.7em; left: -.5em; }
+.annot-bulle:hover, .annot-bulle:focus-visible { background: #0b3566; }
+.annot-bulle:hover::after, .annot-bulle:focus-visible::after { border-top-color: #0b3566; }
+.annot-bulle:focus-visible { outline: 3px solid #1a5fd0; outline-offset: 2px; }
+.annot-num { display: inline; }
+
+/* Fenêtre de lecture d'un passage */
+.annot-lecture-couleur { margin: 0 0 .5rem; font-size: .95rem; }
+.annot-lecture { margin: .1rem 0 .4rem; padding: .45rem .65rem; background: #f6f8fa; border-left: 5px solid var(--annot-bulle); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 1.02rem; line-height: 1.45; }
+.annot-vue { padding: .9rem 1rem 1rem; }
+
+/* Info-bulle (survol à la souris) */
+.annot-infobulle { position: absolute; z-index: 70; max-width: min(22rem, calc(100vw - 1rem)); padding: .45rem .65rem; background: #1f2933; color: #fff; border-radius: .35rem; font-size: .92rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: 0 2px 10px rgba(0,0,0,.3); pointer-events: none; }
+.annot-infobulle[hidden] { display: none; }
+
+/* En tête de fiche : aide, résumé, messages, annotations à rattacher */
+.annot-tete { margin: .35rem 0 0; font-size: .92rem; }
+.annot-tete p { margin: .2rem 0; }
+.annot-aide { color: var(--muted); }
+.annot-msg { font-size: .92rem; color: var(--muted); }
+.annot-msg:empty { display: none; }
+.annot-msg.annot-erreur { color: #9b1c1c; font-weight: 700; }
+.annot-orphelines { margin: .6rem 0 0; padding: .5rem .8rem; background: #fff7e0; border: 2px solid #7a5a00; border-left-width: 6px; font-size: 1rem; }
+.annot-orphelines[hidden] { display: none; }
+.annot-orphelines-t { font-weight: 700; }
+.annot-orphelines ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+.annot-orphelines li { margin: .4rem 0; }
+
+/* Boutons */
+.annot-btn { font: inherit; font-size: .95rem; font-weight: 600; min-height: 2.5rem; padding: .3rem .85rem; color: #1f2933; background: #fff; border: 2px solid #37474f; border-radius: .4rem; cursor: pointer; }
+.annot-btn:hover:not(:disabled) { background: #eef1f4; }
+.annot-btn:disabled { color: #5d6670; border-color: #8c969f; cursor: default; }
+.annot-btn-danger { color: #fff; background: #8a1c1c; border-color: #8a1c1c; }
+.annot-btn-danger:hover:not(:disabled) { background: #6f1515; }
+.annot-btn-petit { min-height: 2.25rem; padding: .15rem .65rem; font-size: .9rem; }
+.annot-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0 0; }
+.annot-pastille { display: inline-block; width: 1.1em; height: 1.1em; vertical-align: -.15em; margin-right: .35em; border: 1px solid #37474f; border-radius: .2em; }
+.annot-pastille.annot-c1 { background: var(--annot-1); } .annot-pastille.annot-c2 { background: var(--annot-2); } .annot-pastille.annot-c3 { background: var(--annot-3); }
+
+/* Barre d'annotation (bas de l'écran, pendant une sélection) */
+.annot-barre { position: fixed; left: 50%; bottom: max(.6rem, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .4rem .5rem; width: max-content; max-width: calc(100vw - 1rem); padding: .5rem .6rem; background: #fff; border: 2px solid #37474f; border-radius: .6rem; box-shadow: 0 4px 18px rgba(0,0,0,.28); font-size: .95rem; }
+.annot-barre[hidden] { display: none; }
+.annot-barre-t { font-weight: 700; margin-right: .1rem; }
+.annot-barre .annot-msg { flex-basis: 100%; text-align: center; }
+.annot-barre-err { max-width: 26rem; color: #9b1c1c; font-weight: 700; }
+
+/* Dialogue (commentaire, note) */
+.annot-dialogue { width: min(36rem, calc(100vw - 1.5rem)); max-height: calc(100vh - 2rem); max-height: calc(100dvh - 2rem); overflow-y: auto; padding: 0; border: 2px solid #37474f; border-radius: .6rem; color: #1f2933; background: #fff; box-shadow: 0 6px 30px rgba(0,0,0,.35); }
+.annot-dialogue::backdrop { background: rgba(0,0,0,.45); }
+.annot-dialogue form { padding: .9rem 1rem 1rem; }
+.annot-dialogue h2 { margin: 0 0 .5rem; font-size: 1.2rem; line-height: 1.25; }
+.annot-citation { margin: .3rem 0 .6rem; padding: .35rem .6rem; border-left: 5px solid #37474f; font-size: .98rem; overflow-wrap: anywhere; }
+.annot-citation.annot-c1 { background: var(--annot-1); } .annot-citation.annot-c2 { background: var(--annot-2); } .annot-citation.annot-c3 { background: var(--annot-3); }
+.annot-couleurs { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin: 0 0 .6rem; padding: 0; border: 0; }
+.annot-couleurs legend { padding: 0; margin-bottom: .2rem; font-weight: 700; }
+.annot-couleurs label { display: inline-flex; align-items: center; gap: .3rem; min-height: 2.25rem; cursor: pointer; }
+.annot-couleurs input { width: 1.2rem; height: 1.2rem; margin: 0; accent-color: #37474f; }
+.annot-champ { display: block; font-weight: 700; margin: .2rem 0; }
+.annot-dialogue textarea { display: block; width: 100%; min-height: 7rem; padding: .45rem .55rem; font: inherit; font-size: 1rem; line-height: 1.4; color: #1f2933; border: 2px solid #5d6670; border-radius: .35rem; resize: vertical; }
+.annot-compteur { margin: .2rem 0 0; font-size: .85rem; color: var(--muted); text-align: right; }
+.annot-confirm { margin: .5rem 0 0; padding: .5rem .7rem; background: #fff7e0; border: 2px solid #7a5a00; }
+.annot-confirm[hidden] { display: none; }
+.annot-confirm p { margin: 0 0 .3rem; font-weight: 700; }
+
+/* Notes de la fiche (bas de page) */
+.annot-notes { max-width: 60rem; margin: 1.5rem auto 0; background: #fff; border: 1px solid var(--line); border-top: 6px solid #37474f; padding: .6rem 1.25rem 1rem; }
+.annot-notes h2 { margin: .1rem 0 .4rem; font-size: 1.2rem; }
+.annot-notes-liste { list-style: none; margin: 0; padding: 0; }
+.annot-notes-liste > li { margin: .5rem 0; padding: .45rem .7rem; background: #f6f8fa; border-left: 5px solid #37474f; }
+.annot-texte { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.annot-date { margin: .2rem 0 0; font-size: .82rem; color: var(--muted); }
+.annot-vide { color: var(--muted); }
+
+/* Page « Mes annotations » */
+.annot-liste { margin-top: .5rem; }
+.annot-filtres { display: flex; flex-wrap: wrap; gap: .3rem 1.1rem; margin: .4rem 0 .6rem; padding: .4rem 0; border: 0; border-top: 1px solid #dde2e6; border-bottom: 1px solid #dde2e6; }
+.annot-filtres[hidden] { display: none; }
+.annot-filtres legend { float: left; margin-right: .6rem; padding: .35rem 0; font-weight: 700; }
+.annot-filtres label { display: inline-flex; align-items: center; gap: .35rem; min-height: 2.25rem; cursor: pointer; }
+.annot-filtres input { width: 1.2rem; height: 1.2rem; margin: 0; accent-color: #37474f; }
+.annot-resume-liste { font-size: 1.05rem; }
+.annot-partie { margin: 1rem 0 .3rem; padding-bottom: .1rem; border-bottom: 2px solid var(--c); color: var(--c); font-size: 1.05rem; }
+.annot-fiche-t { margin: .8rem 0 .2rem; font-size: 1.02rem; }
+.annot-items { list-style: none; margin: 0; padding: 0; }
+.annot-items > li { margin: .4rem 0; padding: .1rem 0 .3rem; border-bottom: 1px solid #edf0f2; }
+.annot-items .annot-citation { margin: .2rem 0; }
+.annot-items .annot-texte { margin: .2rem 0 .1rem .2rem; }
+.annot-lien { font-size: .9rem; }
+.annot-type { font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+
+/* Impression : surlignages imprimés ; bulles -> numéros ; liste des commentaires et notes en fin de page */
+.annot-impression { display: none; }
+@media print {
+  mark.annot { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .annot-bulle { min-width: 0; height: auto; margin: 0 0 0 .05em; padding: 0; vertical-align: super; font-size: .7em; line-height: 1; color: #000; background: none; box-shadow: none; }
+  .annot-bulle::before, .annot-bulle::after { display: none; }
+  .annot-tete, .annot-notes, .annot-barre, .annot-dialogue, .annot-infobulle { display: none !important; }
+  .annot-impression:not(:empty) { display: block; break-before: page; }
+  .annot-impression h2 { font-size: 12pt; margin: 0 0 .3rem; }
+  .annot-impression h3 { font-size: 10.5pt; margin: .6rem 0 .2rem; }
+  .annot-impression ol, .annot-impression ul { margin: 0; padding-left: 1.6rem; }
+  .annot-impression li { margin: .25rem 0; break-inside: avoid; }
+  .annot-citation, .annot-pastille { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .annot-filtres, .annot-lien { display: none !important; }
+}
+@media (max-width: 59.99rem) {
+  .annot-notes { padding: .5rem .9rem .9rem; }
+}
+@media (forced-colors: active) {
+  mark.annot { background: Mark; color: MarkText; forced-color-adjust: none; }
+  .annot-bulle { forced-color-adjust: none; background: ButtonText; color: ButtonFace; } .annot-bulle::after { border-top-color: ButtonText; }
+  .annot-barre, .annot-orphelines, .annot-dialogue { border-color: CanvasText; }
+}
+@media (prefers-reduced-motion: reduce) { mark.annot-flash { animation: none; outline: 3px solid #1a5fd0; } }
